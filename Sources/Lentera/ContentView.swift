@@ -147,9 +147,10 @@ struct ContentView: View {
   }
 
   private var bookshelfPage: some View {
-    VStack(spacing: 0) {
+    let visibleBooks = model.visibleBooks
+    return VStack(spacing: 0) {
       HStack {
-        Text("\(model.visibleBooks.count) buku").foregroundStyle(.secondary)
+        Text("\(visibleBooks.count) buku").foregroundStyle(.secondary)
         Spacer()
         Picker("Filter format", selection: $model.shelfFilter) {
           ForEach(ShelfFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
@@ -157,31 +158,47 @@ struct ContentView: View {
         .pickerStyle(.segmented).frame(width: 220)
         .labelsHidden()
         .accessibilityLabel("Filter format")
+        Menu {
+          Picker("Urutkan buku", selection: $model.shelfSort) {
+            ForEach(ShelfSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
+          }
+        } label: {
+          Image(systemName: "arrow.up.arrow.down")
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+        .accessibilityLabel("Urutkan buku")
+        .accessibilityValue(model.shelfSort.rawValue)
+        .help("Urutkan: \(model.shelfSort.rawValue)")
       }
       .padding(24)
-      if model.visibleBooks.isEmpty {
+      if visibleBooks.isEmpty {
         ContentUnavailableView {
-          Label(model.books.isEmpty ? "Belum Ada Buku" : "Tidak Ada Buku \(model.shelfFilter.rawValue)", systemImage: "books.vertical")
+          Label(model.books.isEmpty ? "Belum Ada Buku" : "Tidak Ada Buku yang Cocok", systemImage: "books.vertical")
         } description: {
-          Text(model.books.isEmpty ? "Buku yang selesai dikonversi akan muncul di sini." : "Pilih Semua untuk melihat koleksi Anda.")
+          Text(model.books.isEmpty ? "Buku yang selesai dikonversi akan muncul di sini." : "Coba judul atau penulis lain, atau tampilkan semua buku.")
         } actions: {
           if model.books.isEmpty {
             Button("Tambah File ACSM…", action: model.chooseFile).disabled(model.isConverting)
           } else {
-            Button("Tampilkan Semua") { model.shelfFilter = .all }
+            Button("Tampilkan Semua") {
+              model.shelfFilter = .all
+              model.shelfSearch = ""
+            }
           }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         ScrollView {
           LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 28)], alignment: .leading, spacing: 28) {
-            ForEach(model.visibleBooks) { BookCard(book: $0) }
+            ForEach(visibleBooks) { BookCard(book: $0) }
           }
           .padding(.horizontal, 24).padding(.bottom, 24)
         }
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Cari judul atau penulis")
   }
 }
 

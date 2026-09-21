@@ -51,7 +51,7 @@ struct ConversionService {
     let adept = try persistentAdeptDirectory()
     if !fileManager.fileExists(atPath: adept.appendingPathComponent("activation.xml").path) {
       progress(.init(progress: 0.12, message: "Mengaktifkan perangkat Adobe…"))
-            _ = try await run(
+      _ = try await run(
         tools.activate, ["--anonymous", "--random-serial", "--output-dir", adept.path],
         currentDirectory: work)
     }
@@ -73,7 +73,7 @@ struct ConversionService {
 
     try Task.checkCancellation()
     progress(.init(progress: 0.68, message: "Membuka proteksi buku…"))
-        _ = try await run(
+    _ = try await run(
       tools.remove,
       ["--adept-directory", adept.path, "--output-file", decrypted.path, encrypted.path],
       currentDirectory: work
@@ -104,7 +104,9 @@ struct ConversionService {
     let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("Lentera", isDirectory: true)
     try fileManager.createDirectory(at: support, withIntermediateDirectories: true)
-    return support.appendingPathComponent("adept", isDirectory: true)
+    let adept = support.appendingPathComponent("adept", isDirectory: true)
+    try fileManager.createDirectory(at: adept, withIntermediateDirectories: true)
+    return adept
   }
 
   private func downloadedBook(in directory: URL, commandOutput: String) throws -> URL {
@@ -120,27 +122,40 @@ struct ConversionService {
     throw ConversionError.commandFailed("acsmdownloader", commandOutput)
   }
 
-  private func run(_ executable: URL, _ arguments: [String], currentDirectory: URL) async throws
+  func run(_ executable: URL, _ arguments: [String], currentDirectory: URL) async throws
     -> String
   {
     try Task.checkCancellation()
-    return try await Task.detached(priority: .userInitiated) {
-      let process = Process()
-      let pipe = Pipe()
-      process.executableURL = executable
-      process.arguments = arguments
-      process.currentDirectoryURL = currentDirectory
-      process.standardOutput = pipe
-      process.standardError = pipe
-      try process.run()
-      let data = pipe.fileHandleForReading.readDataToEndOfFile()
-      process.waitUntilExit()
-      let output = String(decoding: data, as: UTF8.self)
-      guard process.terminationStatus == 0 else {
-        throw ConversionError.commandFailed(executable.lastPathComponent, output)
+    let handle = RunningProcess()
+    do {
+      let output = try await withTaskCancellationHandler {
+        try await Task.detached(priority: .userInitiated) {
+          let process = Process()
+          let pipe = Pipe()
+          process.executableURL = executable
+          process.arguments = arguments
+          process.currentDirectoryURL = currentDirectory
+          process.standardOutput = pipe
+          process.standardError = pipe
+          defer { handle.clear() }
+          try handle.start(process)
+          let data = pipe.fileHandleForReading.readDataToEndOfFile()
+          process.waitUntilExit()
+          let output = String(decoding: data, as: UTF8.self)
+          guard process.terminationStatus == 0 else {
+            throw ConversionError.commandFailed(executable.lastPathComponent, output)
+          }
+          return output
+        }.value
+      } onCancel: {
+        handle.terminate()
       }
+      try Task.checkCancellation()
       return output
-    }.value
+    } catch {
+      try Task.checkCancellation()
+      throw error
+    }
   }
 
   private func safeBaseName(_ name: String) -> String {
@@ -162,6 +177,34 @@ struct ConversionService {
   }
 }
 
+private final class RunningProcess: @unchecked Sendable {
+  private let lock = NSLock()
+  private var process: Process?
+  private var terminationRequested = false
+
+  // Start and cancellation share a lock so terminate never precedes launch.
+  func start(_ process: Process) throws {
+    lock.lock()
+    defer { lock.unlock() }
+    guard !terminationRequested else { throw CancellationError() }
+    try process.run()
+    self.process = process
+  }
+
+  func clear() {
+    lock.lock()
+    process = nil
+    lock.unlock()
+  }
+
+  func terminate() {
+    lock.lock()
+    defer { lock.unlock() }
+    terminationRequested = true
+    if let process, process.isRunning { process.terminate() }
+  }
+}
+
 struct ToolLocator {
   let activate: URL
   let downloader: URL
@@ -176,7 +219,7 @@ struct ToolLocator {
   }
 
   private static func tool(_ name: String) throws -> URL {
-        let bundled = Bundle.module.url(forResource: name, withExtension: nil)
+    let bundled = Bundle.module.url(forResource: name, withExtension: nil)
     if let bundled, FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
     guard let external = firstExisting(["/opt/homebrew/bin/\(name)", "/usr/local/bin/\(name)"])
     else {
@@ -192,45 +235,55 @@ struct ToolLocator {
   }
 }
 
-struct BookMetadata {
+struct BookMetadata: Sendable {
   let title: String
   let author: String
   let coverData: Data?
 
   static func read(from file: URL, fallbackTitle: String) -> BookMetadata {
     guard file.pathExtension.lowercased() == "epub" else {
-      return BookMetadata(title: fallbackTitle, author: "Author tidak tersedia", coverData: nil)
+      return BookMetadata(title: fallbackTitle, author: "Penulis tidak tersedia", coverData: nil)
     }
 
-    let container = unzip(file, entry: "META-INF/container.xml")
-    let packagePath = capture(#"full-path=[\"']([^\"']+\.opf)[\"']"#, in: container) ?? ""
-    let package = packagePath.isEmpty ? "" : unzip(file, entry: packagePath)
-    let title = clean(capture(#"<dc:title[^>]*>(.*?)</dc:title>"#, in: package)) ?? fallbackTitle
-    let author = clean(capture(#"<dc:creator[^>]*>(.*?)</dc:creator>"#, in: package)) ?? "Author tidak tersedia"
-    let cover = coverData(from: file, packagePath: packagePath, package: package)
-    return BookMetadata(title: title, author: author, coverData: cover)
-  }
+    guard let container = xml(unzipData(file, entry: "META-INF/container.xml")),
+      let packagePath = value(container, "//*[local-name()='rootfile']/@full-path"),
+      let package = xml(unzipData(file, entry: packagePath))
+    else { return BookMetadata(title: fallbackTitle, author: "Penulis tidak tersedia", coverData: nil) }
 
-  private static func coverData(from file: URL, packagePath: String, package: String) -> Data? {
-    let coverID = capture(#"<meta[^>]+name=[\"']cover[\"'][^>]+content=[\"']([^\"']+)[\"']"#, in: package)
-    let href: String?
-    if let coverID {
-      let id = NSRegularExpression.escapedPattern(for: coverID)
-      href = capture(#"<item[^>]+href=[\"']([^\"']+)[\"'][^>]+id=[\"']"# + id + #"[\"']"#, in: package)
-        ?? capture(#"<item[^>]+id=[\"']"# + id + #"[\"'][^>]+href=[\"']([^\"']+)[\"']"#, in: package)
+    let title = value(package, "//*[local-name()='metadata']/*[local-name()='title']") ?? fallbackTitle
+    let author = value(package, "//*[local-name()='metadata']/*[local-name()='creator']") ?? "Penulis tidak tersedia"
+    let coverID = value(package, "//*[local-name()='meta'][@name='cover']/@content")
+    let items = (try? package.nodes(forXPath: "//*[local-name()='manifest']/*[local-name()='item']")) ?? []
+    let elements = items.compactMap { $0 as? XMLElement }
+    let cover = elements.first {
+      ($0.attribute(forName: "properties")?.stringValue ?? "").split(whereSeparator: { $0.isWhitespace }).contains("cover-image")
+    } ?? elements.first {
+      guard let coverID else { return false }
+      return $0.attribute(forName: "id")?.stringValue == coverID
+    }
+    let coverData: Data?
+    if let href = cover?.attribute(forName: "href")?.stringValue,
+      let base = URL(string: "https://epub.invalid/" + packagePath),
+      let resolved = URL(string: href, relativeTo: base)?.absoluteURL,
+      resolved.scheme == "https", resolved.host == "epub.invalid"
+    {
+      coverData = unzipData(file, entry: String(resolved.path.dropFirst()))
     } else {
-      href = capture(#"<item[^>]+properties=[\"'][^\"']*cover-image[^\"']*[\"'][^>]+href=[\"']([^\"']+)[\"']"#, in: package)
+      coverData = nil
     }
-    let resolvedHref = href ?? capture(#"<item[^>]+href=[\"']([^\"']*cover[^\"']*)[\"']"#, in: package)
-    guard let resolvedHref else { return nil }
-    let base = (packagePath as NSString).deletingLastPathComponent
-    let entry = base.isEmpty ? resolvedHref : (base as NSString).appendingPathComponent(resolvedHref)
-    return unzipData(file, entry: entry.removingPercentEncoding ?? entry)
+    return BookMetadata(title: title, author: author, coverData: coverData)
   }
 
-  private static func unzip(_ file: URL, entry: String) -> String {
-    guard let data = unzipData(file, entry: entry) else { return "" }
-    return String(decoding: data, as: UTF8.self)
+  private static func xml(_ data: Data?) -> XMLDocument? {
+    guard let data else { return nil }
+    return try? XMLDocument(data: data, options: [.nodeLoadExternalEntitiesNever])
+  }
+
+  private static func value(_ document: XMLDocument, _ path: String) -> String? {
+    guard let node = try? document.nodes(forXPath: path).first,
+      let value = node.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty
+    else { return nil }
+    return value
   }
 
   private static func unzipData(_ file: URL, entry: String) -> Data? {
@@ -246,23 +299,7 @@ struct BookMetadata {
     return process.terminationStatus == 0 && !data.isEmpty ? data : nil
   }
 
-  private static func capture(_ pattern: String, in text: String) -> String? {
-    guard let regex = try? NSRegularExpression(pattern: pattern, options: [.caseInsensitive, .dotMatchesLineSeparators]),
-      let match = regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
-      let range = Range(match.range(at: 1), in: text)
-    else { return nil }
-    return String(text[range])
-  }
 
-  private static func clean(_ value: String?) -> String? {
-    guard let value else { return nil }
-    let decoded = value
-      .replacingOccurrences(of: "&amp;", with: "&")
-      .replacingOccurrences(of: "&quot;", with: "\"")
-      .replacingOccurrences(of: "&#39;", with: "'")
-      .trimmingCharacters(in: .whitespacesAndNewlines)
-    return decoded.isEmpty ? nil : decoded
-  }
 }
 
 enum FriendlyError {

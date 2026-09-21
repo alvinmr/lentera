@@ -21,6 +21,12 @@ enum ShelfFilter: String, CaseIterable, Sendable {
   case pdf = "PDF"
 }
 
+enum ShelfSort: String, CaseIterable {
+  case newest = "Terbaru"
+  case oldest = "Terlama"
+  case title = "Judul A–Z"
+}
+
 struct BookRecord: Codable, Identifiable, Sendable {
   let id: UUID
   let title: String
@@ -78,6 +84,8 @@ struct ErrorPresentation: Identifiable {
 final class ConversionModel {
   var page: AppPage = .convert
   var shelfFilter: ShelfFilter = .all
+  var shelfSearch = ""
+  var shelfSort: ShelfSort = .newest
   var selectedFile: URL?
   var destination: URL?
   var isDropTargeted = false
@@ -87,38 +95,50 @@ final class ConversionModel {
   var resultFile: URL?
   var books: [BookRecord] = []
   var visibleBooks: [BookRecord] {
-    switch shelfFilter {
-    case .all: return books
-    case .epub: return books.filter { $0.format == .epub }
-    case .pdf: return books.filter { $0.format == .pdf }
+    let query = shelfSearch.trimmingCharacters(in: .whitespacesAndNewlines)
+    return books.filter { book in
+      let matchesFormat = shelfFilter == .all || book.format.rawValue == shelfFilter.rawValue
+      return matchesFormat && (query.isEmpty || book.title.localizedStandardContains(query)
+        || (book.author?.localizedStandardContains(query) ?? false))
+    }.sorted { lhs, rhs in
+      switch shelfSort {
+      case .newest where lhs.completedAt != rhs.completedAt: return lhs.completedAt > rhs.completedAt
+      case .oldest where lhs.completedAt != rhs.completedAt: return lhs.completedAt < rhs.completedAt
+      default:
+        let order = lhs.title.localizedStandardCompare(rhs.title)
+        return order == .orderedSame ? lhs.id.uuidString < rhs.id.uuidString : order == .orderedAscending
+      }
     }
   }
   var errorPresentation: ErrorPresentation?
 
   private var conversionTask: Task<Void, Never>?
 
-  init() {
+  init(books: [BookRecord]? = nil) {
+    if let books {
+      self.books = books
+      return
+    }
     if let data = UserDefaults.standard.data(forKey: "bookshelf"),
       let saved = try? JSONDecoder().decode([BookRecord].self, from: data)
     {
-      books = saved.map { book in
-        guard book.author == nil || book.coverPath == nil,
-          FileManager.default.isReadableFile(atPath: book.filePath),
-          book.format == .epub
-        else { return book }
-        let metadata = BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
-        return BookRecord(
-          id: book.id,
-          title: metadata.title,
-          author: metadata.author,
-          filePath: book.filePath,
-          format: book.format,
-          coverPath: book.coverPath ?? Self.saveCover(metadata.coverData, id: book.id),
-          completedAt: book.completedAt
-        )
-      }
-      if let refreshed = try? JSONEncoder().encode(books) {
-        UserDefaults.standard.set(refreshed, forKey: "bookshelf")
+      self.books = saved
+      Task { [weak self] in
+        for book in saved where book.format == .epub && (book.author == nil || book.coverPath == nil) {
+          let metadata = await Task.detached(priority: .utility) {
+            BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
+          }.value
+          guard let self else { return }
+          guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
+          self.books[index] = BookRecord(
+            id: book.id, title: metadata.title, author: book.author ?? metadata.author,
+            filePath: book.filePath, format: book.format,
+            coverPath: book.coverPath ?? Self.saveCover(metadata.coverData, id: book.id),
+            completedAt: book.completedAt)
+        }
+        if let self, let refreshed = try? JSONEncoder().encode(self.books) {
+          UserDefaults.standard.set(refreshed, forKey: "bookshelf")
+        }
       }
     }
   }
@@ -176,17 +196,21 @@ final class ConversionModel {
     statusText = "Memeriksa mesin konversi…"
 
     conversionTask = Task {
+      defer {
+        isConverting = false
+        conversionTask = nil
+      }
       do {
         let result = try await ConversionService().convert(
           acsm: selectedFile,
           destination: outputDirectory
         ) { [weak self] update in
           Task { @MainActor in
-            self?.progress = update.progress
-            self?.statusText = update.message
+            guard let self, let task = self.conversionTask, !task.isCancelled else { return }
+            self.progress = update.progress
+            self.statusText = update.message
           }
         }
-        guard !Task.isCancelled else { return }
         resultFile = result.fileURL
         addBook(result)
       } catch is CancellationError {
@@ -194,16 +218,13 @@ final class ConversionModel {
       } catch {
         errorPresentation = .from(error)
       }
-      isConverting = false
-      conversionTask = nil
     }
   }
 
   func cancel() {
+    guard isConverting, conversionTask != nil else { return }
+    statusText = "Membatalkan…"
     conversionTask?.cancel()
-    conversionTask = nil
-    isConverting = false
-    statusText = "Dibatalkan"
   }
 
   private func select(_ url: URL) {

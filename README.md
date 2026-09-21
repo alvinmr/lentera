@@ -78,7 +78,7 @@ Book files are processed locally. Lentera contacts Adobe and the book provider o
 
 ## Third-party source
 
-The matching libgourou and uPDFParser source and licenses are included under `Vendor/libgourou`. The release includes a source archive alongside the app.
+The matching libgourou and uPDFParser source and licenses are included under `Vendor/libgourou` in the repository.
 
 ## Legal
 
