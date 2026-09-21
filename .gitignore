@@ -1,0 +1,11 @@
+.build/
+build/
+.DS_Store
+
+.vscode/
+Vendor/libgourou/utils/acsmdownloader
+Vendor/libgourou/utils/adept_activate
+Vendor/libgourou/utils/adept_remove
+Vendor/libgourou/utils/adept_loan_mgt
+Vendor/libgourou/utils/launcher
+Support/Lentera.iconset/
