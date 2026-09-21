@@ -2,6 +2,10 @@
   "release-type": "node",
   "package-name": "lentera",
   "include-component-in-tag": false,
-  "bump-minor-pre-major": true,
-  "changelog-path": "CHANGELOG.md"
+  "bump-minor-pre-major": false,
+  "changelog-path": "CHANGELOG.md",
+  "packages": {
+    ".": {}
+  },
+  "bump-patch-for-minor-pre-major": false
 }

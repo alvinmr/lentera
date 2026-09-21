@@ -66,9 +66,11 @@ Releases are managed by GitHub Actions with [Release Please](https://github.com/
 - `feat:` increments the minor version (`0.1.0` → `0.2.0`)
 - `feat!:` or `BREAKING CHANGE:` increments the major version (`0.1.0` → `1.0.0`)
 
-A push to `main` opens or updates a release PR. Merge that PR to create the tag and GitHub Release. The release workflow then builds the app on `macos-14`, packages `Lentera.app`, and uploads the versioned ZIP automatically.
+A push to `main` opens or updates a release PR. Merge that PR to create the tag and GitHub Release. A dependent job in the same workflow then builds the app on an Apple Silicon `macos-15-arm64` runner, packages `Lentera.app`, and uploads the versioned ZIP automatically.
 
 The workflow expects the repository's default `GITHUB_TOKEN`; no personal token is required. For a release to work, the repository must have Actions enabled and the Homebrew dependencies listed above must remain available.
+
+You can also run **Actions > Release > Run workflow** to verify a build without publishing a new version. The ZIP is available as a workflow artifact. GitHub Actions must be allowed to create pull requests under **Settings > Actions > General > Workflow permissions**.
 
 ## Privacy
 
