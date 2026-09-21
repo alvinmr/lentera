@@ -10,6 +10,8 @@ swift build -c release
 mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$ROOT/.build/release/Lentera" "$APP/Contents/MacOS/Lentera"
 cp "$ROOT/Support/Info.plist" "$APP/Contents/Info.plist"
+VERSION="${LENTERA_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Support/Info.plist")}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
 cp "$ROOT/Support/Lentera.icns" "$APP/Contents/Resources/Lentera.icns"
 cp -R "$ROOT/.build/release/Lentera_Lentera.bundle" "$APP/Contents/Resources/"
 

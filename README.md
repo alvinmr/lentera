@@ -58,6 +58,18 @@ swift test
 
 The build script bundles the required dynamic libraries, embeds the Lentera app icon, and ad-hoc signs the resulting app for local use.
 
+## Automated Releases
+
+Releases are managed by GitHub Actions with [Release Please](https://github.com/googleapis/release-please). Use Conventional Commit prefixes when committing to `main`:
+
+- `fix:` increments the patch version (`0.1.0` → `0.1.1`)
+- `feat:` increments the minor version (`0.1.0` → `0.2.0`)
+- `feat!:` or `BREAKING CHANGE:` increments the major version (`0.1.0` → `1.0.0`)
+
+A push to `main` opens or updates a release PR. Merge that PR to create the tag and GitHub Release. The release workflow then builds the app on `macos-14`, packages `Lentera.app`, and uploads the versioned ZIP automatically.
+
+The workflow expects the repository's default `GITHUB_TOKEN`; no personal token is required. For a release to work, the repository must have Actions enabled and the Homebrew dependencies listed above must remain available.
+
 ## Privacy
 
 Book files are processed locally. Lentera contacts Adobe and the book provider only through libgourou to fulfill and download the ACSM license. The anonymous ADEPT device identity is stored at `~/Library/Application Support/Lentera/adept` so retries can use the same device.
