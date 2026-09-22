@@ -1,16 +1,22 @@
 # Releasing Lentera
 
-Maintainer notes. Only the repository owner has the secrets these steps rely on.
+Maintainer notes. These steps use secrets. Only the repository owner has these secrets.
 
 ## Release flow
 
-- Conventional Commits on `main` drive [Release Please](https://github.com/googleapis/release-please):
-  `fix:` bumps the patch version, `feat:` the minor, `feat!:` or `BREAKING CHANGE:` the major.
-- A push to `main` opens or updates a release PR. Merge it to create the tag and GitHub Release.
-- The Release workflow then builds on an Apple Silicon `macos-26` runner and uploads:
-  - `Lentera-v<version>-macOS.dmg`
-  - `appcast.xml`, signed with EdDSA and with the release notes embedded from the GitHub release body
-  - a version and checksum bump for the cask in `alvinmr/homebrew-tap`
+The repository uses [Release Please](https://github.com/googleapis/release-please). Release Please reads the Conventional Commits on `main`. The commit type sets the new version:
+
+- `fix:` increases the patch version.
+- `feat:` increases the minor version.
+- `feat!:` or `BREAKING CHANGE:` increases the major version.
+
+A push to `main` opens or updates a release pull request (PR). Merge the PR to create the tag and the GitHub Release.
+
+Then the Release workflow builds the app on an Apple Silicon `macos-26` runner. The workflow uploads these items:
+
+1. `Lentera-v<version>-macOS.dmg`
+2. `appcast.xml`. The workflow signs this file with EdDSA. This file contains the release notes from the GitHub release.
+3. The new version and the new checksum for the cask in `alvinmr/homebrew-tap`.
 
 ## One-time setup
 
@@ -20,10 +26,14 @@ Maintainer notes. Only the repository owner has the secrets these steps rely on.
 Scripts/setup-sparkle.sh
 ```
 
-The wizard downloads Sparkle's tools into `.sparkle-tools/` (git-ignored), stores the EdDSA
-private key in the login Keychain, writes `SUPublicEDKey` into `Support/Info.plist` (commit that
-change), and sets the `SPARKLE_PRIVATE_KEY` secret. Without it, releases still publish but the
-appcast is skipped and auto-updates stop working.
+The script does these steps:
+
+1. It downloads the Sparkle tools into the `.sparkle-tools/` folder. Git ignores this folder.
+2. It puts the EdDSA private key in the login Keychain.
+3. It writes `SUPublicEDKey` into `Support/Info.plist`.
+4. It sets the `SPARKLE_PRIVATE_KEY` secret.
+
+Commit the change to `Support/Info.plist`. If you do not run this script, the releases continue. The Release workflow does not create the appcast. Therefore, automatic updates stop.
 
 ### Homebrew tap token
 
@@ -31,8 +41,7 @@ appcast is skipped and auto-updates stop working.
 Scripts/setup-tap-token.sh
 ```
 
-Creates a fine-grained token scoped to `alvinmr/homebrew-tap` with `Contents: Read and write` and
-stores it as `TAP_GITHUB_TOKEN`. Without it, releases skip the cask bump with a warning.
+This script creates a fine-grained token for `alvinmr/homebrew-tap` with `Contents: Read and write`. It stores the token as `TAP_GITHUB_TOKEN`. If you do not run this script, the release does not update the cask. The workflow gives a warning.
 
 ### Release Please token (optional)
 
@@ -40,37 +49,28 @@ stores it as `TAP_GITHUB_TOKEN`. Without it, releases skip the cask bump with a 
 Scripts/setup-release-token.sh
 ```
 
-Creates a fine-grained token scoped to this repository with `Contents`, `Pull requests`, and
-`Issues: Read and write`, stored as `RELEASE_PLEASE_TOKEN`. Pull requests opened with the default
-`GITHUB_TOKEN` do not trigger workflows, so release PRs skip CI without it. Once this is set, the
-`test` check can be required on `main`.
+This script creates a fine-grained token for this repository. The token has the `Contents`, `Pull requests`, and `Issues: Read and write` permissions. It stores the token as `RELEASE_PLEASE_TOKEN`. Pull requests with the default `GITHUB_TOKEN` do not start workflows. Therefore, release PRs skip CI (continuous integration) if you do not set this token. After you set this token, you can make the `test` check necessary on `main`.
 
-## Rebuilding an existing release
+## How to rebuild an existing release
 
 Run **Actions > Release > Run workflow**:
 
-- `release_tag`: the tag to upload to, for example `v0.4.0`.
-- `source_ref`: optional git ref to build from; defaults to the tag. Use `main` to ship build fixes
-  that landed after the tag.
+- `release_tag`: the tag for the upload. Example: `v0.4.0`.
+- `source_ref`: optional. The git ref for the build. The default value is the tag. Use `main` to include build fixes from commits after the tag.
 
-The run replaces the DMG and regenerates the appcast. `CFBundleVersion` comes from the workflow run
-number, so installed apps still see the update.
+The run replaces the DMG and creates a new appcast. The workflow run number supplies `CFBundleVersion`. Therefore, the installed apps can see the update.
 
 ## Repository requirements
 
-- Actions enabled, with permission to create pull requests.
-- Runner `macos-26` for the Liquid Glass SDK; the deployment target stays macOS 14 in `Package.swift`
-  and `Support/Info.plist`.
-- Engine dependencies build from source with `MACOSX_DEPLOYMENT_TARGET=14.0` and are cached in
-  `.engine-deps` (cache key = hash of `Scripts/build-engine-deps.sh`). Homebrew libraries are not
-  used, so the bundled tools keep running on older macOS than the runner.
-- The "Protect main" ruleset blocks force pushes and deletions. Required status checks are left off
-  until release PRs run CI.
+- Enable GitHub Actions. Give the repository permission to create pull requests.
+- Use the `macos-26` runner for the Liquid Glass SDK. The deployment target must stay macOS 14 in `Package.swift` and `Support/Info.plist`.
+- The engine dependencies build from the source with `MACOSX_DEPLOYMENT_TARGET=14.0`. The build caches them in `.engine-deps`. The cache key is the hash of `Scripts/build-engine-deps.sh`. The build does not use Homebrew libraries. Therefore, the bundled tools operate on macOS versions that are older than the runner.
+- The "Protect main" ruleset prevents force pushes and deletions. Do not make the status checks necessary until release PRs start CI.
 
 ## Secrets
 
 | Secret | Purpose | Required |
 | --- | --- | --- |
-| `SPARKLE_PRIVATE_KEY` | Sign appcasts | Yes, for auto-updates |
-| `TAP_GITHUB_TOKEN` | Bump the Homebrew cask | Optional |
-| `RELEASE_PLEASE_TOKEN` | Run CI on release PRs | Optional |
+| `SPARKLE_PRIVATE_KEY` | Sign appcasts | Yes, for automatic updates |
+| `TAP_GITHUB_TOKEN` | Update the Homebrew cask | Optional |
+| `RELEASE_PLEASE_TOKEN` | Start CI on release PRs | Optional |

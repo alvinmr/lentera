@@ -4,30 +4,35 @@
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20Apple%20Silicon-blue)](https://github.com/alvinmr/lentera/releases/latest)
 [![License: MIT](https://img.shields.io/github/license/alvinmr/lentera)](LICENSE)
 
-Lentera is a native macOS app that converts Adobe ACSM license files into the EPUB or PDF file returned by the authorized book provider. It is a local alternative to Adobe Digital Editions for getting books you own into the reader you actually use.
+Lentera is a native macOS app. It converts ACSM license files from Adobe into an EPUB file or a PDF file that the book provider supplies. Lentera is a local alternative to Adobe Digital Editions. You can read the books in the app that you usually use.
 
-![Lentera converting a batch of ACSM files](docs/screenshots/queue.png)
+![Lentera with a batch of ACSM files in the conversion queue](docs/screenshots/queue.png)
 
 ## Features
 
-- **Batch conversion** — drag in one or many `.acsm` files; they convert one after another, and a failed book does not stop the queue.
-- **EPUB or PDF** — the provider decides the format. Lentera saves the file with the book's real title and author.
-- **Local bookshelf** — converted books appear with covers, search, a format filter, and sorting. Open a book in its default app, reveal it in Finder, edit its details, or move it to the Trash.
-- **Missing file detection** — books whose files were moved or deleted are flagged so you can clean up the shelf.
-- **Automatic updates** — built-in [Sparkle](https://sparkle-project.org) updates keep the app current.
-- **Private by design** — conversion runs entirely on your Mac through the bundled libgourou tools. Book files never pass through a third-party server.
+- **Batch conversion**: Move one or many `.acsm` files into the drop area. Lentera converts the files in sequence. If the conversion of one file fails, Lentera continues with the other files.
+- **EPUB or PDF**: The provider selects the format. Lentera saves each file with the correct title and the author of the book.
+- **Local bookshelf**: The bookshelf shows the covers of the converted books. You can search, filter, and sort the books. You can open a book, show it in Finder, change its data, or move it to the Trash.
+- **Missing file detection**: Lentera marks a book when its file moves or is absent. Then you can remove the book from the bookshelf.
+- **Automatic updates**: Lentera uses [Sparkle](https://sparkle-project.org) to install updates.
+- **Data privacy**: All conversions occur on your Mac. The libgourou tools in the app do the conversion. No book file goes to a third-party server.
 
 ![Lentera bookshelf with covers](docs/screenshots/bookshelf.png)
 
 ## Download
 
-Download the latest `Lentera-v<version>-macOS.dmg` from the [GitHub Releases](https://github.com/alvinmr/lentera/releases) page. Open it, drag `Lentera.app` onto the `Applications` shortcut, then eject the disk image and launch Lentera from Applications.
+Download the latest `Lentera-v<version>-macOS.dmg` from the [GitHub Releases](https://github.com/alvinmr/lentera/releases) page. Then do these steps:
 
-The release requires **Apple Silicon (M1 or later), macOS 14+**, and an internet connection for fulfillment. Intel Macs are not supported by this binary.
+1. Open the DMG file.
+2. Move `Lentera.app` to the `Applications` shortcut.
+3. Eject the DMG file.
+4. Open Lentera from Applications.
 
-The app is ad-hoc signed and is **not Apple-notarized**. If macOS blocks it, attempt to open it once, then use **System Settings > Privacy & Security > Open Anyway** if you trust this download. Lentera does not require Homebrew or a separate runtime when using the release build.
+The release is for **Apple Silicon Macs (M1 or later), macOS 14 or later**. An internet connection is necessary to fulfill the license. This binary does not operate on Intel Macs.
 
-Alternatively, install with [Homebrew](https://brew.sh) to skip the Gatekeeper prompt (Homebrew downloads are not quarantined):
+The app has an ad-hoc signature. Apple did not notarize the app. If macOS blocks the app, open it one time. If you trust the download, go to **System Settings > Privacy & Security > Open Anyway**. Homebrew and a separate runtime program are not necessary for the release build.
+
+You can also install the app with [Homebrew](https://brew.sh). Homebrew installs the app without the Gatekeeper prompt. Homebrew downloads do not have a quarantine attribute.
 
 ```sh
 brew tap alvinmr/tap
@@ -36,26 +41,27 @@ brew install --cask lentera
 
 ## Use
 
-1. Open Lentera and choose **Convert**.
-2. Click **Choose Files…**, or drag one or more `.acsm` files into the drop area. Double-clicking an `.acsm` file in Finder opens Lentera and adds it to the queue.
-3. Choose a destination folder if `Downloads` is not suitable.
-4. Click **Convert**. Files are converted one at a time; a failed book does not stop the rest of the queue. The provider determines whether each returned file is EPUB or PDF.
-5. Open **Bookshelf** to find completed books. Click a book to open it, or right-click for options.
+1. Open Lentera.
+2. Click **Convert**.
+3. Click **Choose Files…**, or move one or more `.acsm` files into the drop area. If you double-click an `.acsm` file in Finder, Lentera opens and adds the file to the queue.
+4. Select a destination folder if `Downloads` is not the correct folder.
+5. Click **Convert**. Lentera converts the files in sequence. If the conversion of one file fails, Lentera continues with the other files. The provider selects EPUB or PDF for each file.
+6. Open **Bookshelf** to find the converted books. Click a book to open it. Right-click a book for more options.
 
-Lentera needs an ACSM file for a book you are authorized to access. An ACSM file is a license message, not the book itself; the provider and Adobe services still need to fulfill the license during conversion.
+You must have an ACSM file for a book that you can legally access. An ACSM file is a license message. It is not the book. During conversion, the provider and the Adobe services must supply the license.
 
 ## Updates
 
-Lentera updates itself with [Sparkle](https://sparkle-project.org): choose **Check for Updates…** from the application menu. Updates are signed and verified automatically. The app is ad-hoc signed, so macOS may occasionally ask you to confirm opening Lentera after an update.
+Lentera uses [Sparkle](https://sparkle-project.org) to install updates. To get an update, click **Check for Updates…** in the application menu. Sparkle signs the updates and verifies them. The app has an ad-hoc signature. Therefore, macOS can ask you to confirm the app after an update.
 
-## Build From Source
+## Build the app from source
 
 ### Requirements
 
 - macOS 14 or later
-- Xcode 26 or later with Swift 6.2+
-- CMake (`brew install cmake`) for the engine dependencies
-- A libgourou source checkout, unless the included vendor checkout is already prepared
+- Xcode 26 or later with Swift 6.2 or later
+- CMake for the engine dependencies
+- A libgourou source checkout, if the included vendor checkout is not prepared
 
 Install CMake:
 
@@ -71,11 +77,9 @@ Scripts/build-app.sh
 open build/Lentera.app
 ```
 
-`build-engine.sh` first builds OpenSSL, curl, libzip, and pugixml from source for a macOS 14
-deployment target (cached in the git-ignored `.engine-deps/`). Building against Homebrew bottles
-instead would make the bundled engine require the build machine's macOS version.
+`build-engine.sh` first builds OpenSSL, curl, libzip, and pugixml from source. It builds these libraries for a macOS 14 deployment target. The build caches the results in the `.engine-deps/` folder. Git ignores this folder. If you build the libraries against Homebrew bottles, the engine will use the macOS version of the build machine.
 
-If you are using the prepared `Vendor/libgourou` checkout, omit the engine path:
+If the prepared `Vendor/libgourou` checkout is available, do not give the engine path:
 
 ```sh
 Scripts/build-engine.sh
@@ -88,29 +92,29 @@ Run the tests with:
 swift test
 ```
 
-The build script bundles the required dynamic libraries, embeds the Lentera app icon, and ad-hoc signs the resulting app for local use. Run `Scripts/build-dmg.sh` afterward to create a compressed DMG in `build/`; its version comes from the built app.
+The build script also bundles the necessary dynamic libraries. It adds the Lentera app icon to the app. It signs the app with an ad-hoc signature for local use. Run `Scripts/build-dmg.sh` to create a compressed DMG in `build/`. The DMG has the version of the built app.
 
-Maintainer release steps live in [docs/RELEASING.md](docs/RELEASING.md).
+Maintainers can find the release steps in [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Troubleshooting
 
-- **"This ACSM file has expired."** ACSM files are time-limited. Download a fresh copy from the book provider and try again.
-- **"This ACSM was already opened with another device or account."** Fulfill the license with the same authorization you used before, or download a new ACSM from the provider.
-- **"The Google Play device limit has been reached."** Remove an old device authorization in your Google Play Books settings, then retry.
-- **"The book provider is rate limiting requests."** Wait 5–15 minutes before trying again.
-- **The book converted, but the file is not where you expect.** Lentera saves to the folder shown under **Save to** (defaults to `Downloads`) using the book's title, and appends ` 2`, ` 3`, … if a file with that name exists.
-- **macOS says the app cannot be verified.** Open it once, then allow it from **System Settings > Privacy & Security**. The app is not notarized.
-- **Intel Macs are not supported.** The release binary is Apple Silicon only; build from source for other setups.
-- **Where is my data?** The anonymous Adobe device identity and bookshelf metadata live in `~/Library/Application Support/Lentera`. Removing the app and that folder removes everything Lentera stores.
+- **"This ACSM file has expired."** ACSM files expire. Download a new copy from the book provider. Then try again.
+- **"This ACSM was already opened with another device or account."** Fulfill the license with the same authorization as before, or download a new ACSM file from the provider.
+- **"The Google Play device limit has been reached."** Remove an old device authorization in your Google Play Books settings. Then try again.
+- **"The book provider is rate limiting requests."** Wait 5 to 15 minutes. Then try again.
+- **The conversion is complete, but the file is not in the correct folder.** Lentera saves the file in the folder that **Save to** shows. The default folder is `Downloads`. The file has the title of the book. If a file with the same name is in the folder, Lentera adds ` 2`, ` 3`, and more to the name.
+- **macOS says the app cannot be verified.** Open the app one time. Then allow it in **System Settings > Privacy & Security**. Apple did not notarize the app.
+- **The app does not operate on Intel Macs.** The release binary is for Apple Silicon only. For other systems, build the app from the source.
+- **Where is my data?** The anonymous Adobe device identity and the bookshelf metadata are in `~/Library/Application Support/Lentera`. If you remove the app and this folder, you remove all the data that Lentera stores.
 
 ## Privacy
 
-Book files are processed locally. Lentera contacts Adobe and the book provider only through libgourou to fulfill and download the ACSM license. The anonymous ADEPT device identity is stored at `~/Library/Application Support/Lentera/adept` so retries can use the same device.
+Lentera processes book files on your Mac. Lentera uses libgourou to contact Adobe and the book provider. It does this to fulfill the ACSM license and to download the book. Lentera stores the anonymous device identity of the ADEPT system at `~/Library/Application Support/Lentera/adept`. Therefore, a subsequent attempt can use the same device.
 
 ## Third-party source
 
-The matching libgourou and uPDFParser source and licenses are included under `Vendor/libgourou` in the repository.
+The repository includes the related libgourou and uPDFParser source and licenses in `Vendor/libgourou`.
 
 ## Legal
 
-The app's own source is MIT licensed (see `LICENSE`). The bundled conversion engine builds on libgourou, which is LGPL-3.0; the vendored source and license ship in `Vendor/libgourou` and the license is also included in the app bundle. Use Lentera only for books you are authorized to access and where local law permits format shifting.
+The source of the app has an MIT license. See `LICENSE`. The conversion engine uses libgourou, which has an LGPL-3.0 license. The vendored source and the license are in `Vendor/libgourou`. The license is also in the app bundle. Use Lentera only for books that you can legally access. Use it only when local law permits the change of the file format.
