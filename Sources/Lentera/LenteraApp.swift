@@ -20,6 +20,9 @@ struct LenteraApp: App {
     }
     .defaultSize(width: 920, height: 660)
     .windowToolbarStyle(.unified)
+    Settings {
+      SettingsView(model: converter, updater: updaterController.updater)
+    }
     .commands {
       CommandGroup(replacing: .help) {
         Link(

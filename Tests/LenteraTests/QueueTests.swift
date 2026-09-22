@@ -150,3 +150,17 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   try await waitForBatch(model)
   #expect(notifications == 0)
 }
+@MainActor @Test func loadsSavedDestination() {
+  let defaults = UserDefaults.standard
+  let previous = defaults.string(forKey: "destinationPath")
+  defer {
+    if let previous {
+      defaults.set(previous, forKey: "destinationPath")
+    } else {
+      defaults.removeObject(forKey: "destinationPath")
+    }
+  }
+  defaults.set("/tmp/lentera-destination", forKey: "destinationPath")
+  let model = ConversionModel(books: [])
+  #expect(model.destination?.path == "/tmp/lentera-destination")
+}

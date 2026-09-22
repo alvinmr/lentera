@@ -190,6 +190,9 @@ final class ConversionModel {
           acsm: acsm, destination: destination, progress: progress)
       }
     self.notify = notify ?? { _, _ in }
+    if let path = UserDefaults.standard.string(forKey: "destinationPath") {
+      self.destination = URL(fileURLWithPath: path)
+    }
     if let books {
       self.books = books
       return
@@ -294,7 +297,10 @@ final class ConversionModel {
     panel.canChooseDirectories = true
     panel.canCreateDirectories = true
     panel.prompt = "Choose"
-    if panel.runModal() == .OK { destination = panel.url }
+    if panel.runModal() == .OK, let url = panel.url {
+      destination = url
+      UserDefaults.standard.set(url.path, forKey: "destinationPath")
+    }
   }
 
   func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
