@@ -54,8 +54,17 @@ jobs:
           test "$TAG_NAME" = "v${VERSION}"
           gh release view "$TAG_NAME"
 
-      - name: Install native dependencies
-        run: brew install curl libzip openssl@3 pugixml
+      - name: Install build tooling
+        run: command -v cmake >/dev/null || brew install cmake
+
+      - name: Cache engine dependencies
+        uses: actions/cache@v4
+        with:
+          path: .engine-deps
+          key: engine-deps-${{ runner.os }}-${{ hashFiles('Scripts/build-engine-deps.sh') }}
+
+      - name: Build engine dependencies
+        run: ./Scripts/build-engine-deps.sh
 
       - name: Build native engine
         run: ./Scripts/build-engine.sh
