@@ -121,6 +121,14 @@ A push to `main` opens or updates a release PR. Merge that PR to create the tag 
 
 The workflow expects the repository's default `GITHUB_TOKEN`; no personal token is required. For a release to work, the repository must have Actions enabled and CMake available on the runner.
 
+Releases also update the Homebrew cask in `alvinmr/homebrew-tap`. That needs a token with write access to the tap, stored as the `TAP_GITHUB_TOKEN` secret; create it once with:
+
+```sh
+Scripts/setup-tap-token.sh
+```
+
+Without the secret, releases still publish and the cask update is skipped with a warning.
+
 You can also run **Actions > Release > Run workflow** to verify a build without publishing a new version. The DMG is available as a workflow artifact. GitHub Actions must be allowed to create pull requests under **Settings > Actions > General > Workflow permissions**.
 
 ## Privacy
