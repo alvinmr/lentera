@@ -18,7 +18,6 @@ nonisolated enum ConversionError: LocalizedError {
   case invalidInput
   case commandFailed(String, String)
   case outputMissing
-  case calibreRequired
 
   var errorDescription: String? {
     switch self {
@@ -31,9 +30,6 @@ nonisolated enum ConversionError: LocalizedError {
       return FriendlyError.message(command: command, output: output)
     case .outputMissing:
       return "The download finished, but the book file was not found."
-    case .calibreRequired:
-      return
-        "The book is available in a different format. Install Calibre to convert between EPUB and PDF, then try again."
     }
   }
 }
