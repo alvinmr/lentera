@@ -429,6 +429,7 @@ final class ConversionModel {
         } catch {
           batchCompleted += 1
           batchFailed += 1
+          Log.conversion.error("Conversion failed: \(String(describing: error), privacy: .private)")
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].state = .failed(ErrorPresentation.from(error))
           }
@@ -454,6 +455,9 @@ final class ConversionModel {
   }
 
   private func notifyBatchOutcome() {
+    Log.app.notice(
+      "Batch finished: \(self.batchSucceeded) succeeded, \(self.batchFailed) failed, cancelled \(self.batchCancelled, privacy: .public)"
+    )
     guard !batchCancelled, batchSucceeded + batchFailed > 0 else { return }
     var body =
       batchSucceeded == 1 ? "1 book is ready to read." : "\(batchSucceeded) books are ready to read."

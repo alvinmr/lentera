@@ -51,6 +51,7 @@ nonisolated struct ConversionService: Sendable {
     guard acsm.isFileURL, FileManager.default.isReadableFile(atPath: acsm.path) else {
       throw ConversionError.invalidInput
     }
+    Log.conversion.info("Starting conversion for \(acsm.lastPathComponent, privacy: .private)")
 
     let resolvedTools: ToolLocator
     if let tools {
@@ -111,6 +112,8 @@ nonisolated struct ConversionService: Sendable {
       extension: format.fileExtension
     )
     try FileManager.default.copyItem(at: decrypted, to: finalURL)
+    Log.conversion.notice(
+      "Saved \(metadata.title, privacy: .private) as \(format.rawValue, privacy: .public)")
     progress(.init(progress: 1, message: "Done"))
     return ConversionResult(
       fileURL: finalURL,
