@@ -46,15 +46,7 @@ Lentera needs an ACSM file for a book you are authorized to access. An ACSM file
 
 ## Updates
 
-Lentera updates itself with [Sparkle](https://sparkle-project.org). Release builds embed a signed appcast, so installed apps can use **Check for Updates…** from the application menu. Sparkle validates each update with the EdDSA signature, so an Apple Developer ID certificate is not required; the app is ad-hoc signed, and macOS may occasionally ask you to confirm opening Lentera after an update.
-
-Maintainers must create the Sparkle signing key once before publishing a release:
-
-```sh
-Scripts/setup-sparkle.sh
-```
-
-The wizard downloads Sparkle's tools into `.sparkle-tools/` (git-ignored), stores the private key in your login Keychain, writes `SUPublicEDKey` into `Support/Info.plist`, and sets the `SPARKLE_PRIVATE_KEY` GitHub Actions secret. Commit the Info.plist change. Each release then publishes a signed `appcast.xml` that the app reads from `https://github.com/alvinmr/lentera/releases/latest/download/appcast.xml`.
+Lentera updates itself with [Sparkle](https://sparkle-project.org): choose **Check for Updates…** from the application menu. Updates are signed and verified automatically. The app is ad-hoc signed, so macOS may occasionally ask you to confirm opening Lentera after an update.
 
 ## Build From Source
 
@@ -98,6 +90,8 @@ swift test
 
 The build script bundles the required dynamic libraries, embeds the Lentera app icon, and ad-hoc signs the resulting app for local use. Run `Scripts/build-dmg.sh` afterward to create a compressed DMG in `build/`; its version comes from the built app.
 
+Maintainer release steps live in [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Troubleshooting
 
 - **"This ACSM file has expired."** ACSM files are time-limited. Download a fresh copy from the book provider and try again.
@@ -108,34 +102,6 @@ The build script bundles the required dynamic libraries, embeds the Lentera app 
 - **macOS says the app cannot be verified.** Open it once, then allow it from **System Settings > Privacy & Security**. The app is not notarized.
 - **Intel Macs are not supported.** The release binary is Apple Silicon only; build from source for other setups.
 - **Where is my data?** The anonymous Adobe device identity and bookshelf metadata live in `~/Library/Application Support/Lentera`. Removing the app and that folder removes everything Lentera stores.
-
-## Automated Releases
-
-Releases are managed by GitHub Actions with [Release Please](https://github.com/googleapis/release-please). Use Conventional Commit prefixes when committing to `main`:
-
-- `fix:` increments the patch version (`0.1.0` → `0.1.1`)
-- `feat:` increments the minor version (`0.1.0` → `0.2.0`)
-- `feat!:` or `BREAKING CHANGE:` increments the major version (`0.1.0` → `1.0.0`)
-
-A push to `main` opens or updates a release PR. Merge that PR to create the tag and GitHub Release. A dependent job in the same workflow then builds the app on an Apple Silicon `macos-26` runner, packages `Lentera.app`, and uploads the versioned DMG and signed Sparkle appcast automatically.
-
-The workflow expects the repository's default `GITHUB_TOKEN`; no personal token is required. For a release to work, the repository must have Actions enabled and CMake available on the runner.
-
-Releases also update the Homebrew cask in `alvinmr/homebrew-tap`. That needs a token with write access to the tap, stored as the `TAP_GITHUB_TOKEN` secret; create it once with:
-
-```sh
-Scripts/setup-tap-token.sh
-```
-
-Without the secret, releases still publish and the cask update is skipped with a warning.
-
-Release Please opens its pull request with the default `GITHUB_TOKEN`, and events from that token do not start workflows, so CI does not run on release PRs unless you store a personal token as `RELEASE_PLEASE_TOKEN`:
-
-```sh
-Scripts/setup-release-token.sh
-```
-
-You can also run **Actions > Release > Run workflow** to verify a build without publishing a new version. The DMG is available as a workflow artifact. GitHub Actions must be allowed to create pull requests under **Settings > Actions > General > Workflow permissions**.
 
 ## Privacy
 
