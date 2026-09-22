@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/alvinmr/lentera/compare/v0.3.0...v0.4.0) (2026-09-22)
+
+
+### Features
+
+* adopt Liquid Glass surfaces ([a9596e6](https://github.com/alvinmr/lentera/commit/a9596e647afdf98ed97f3f3729f629080ef08b99))
+
 ## [0.3.0](https://github.com/alvinmr/lentera/compare/v0.2.1...v0.3.0) (2026-09-22)
 
 
