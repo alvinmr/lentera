@@ -33,12 +33,12 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   let model = ConversionModel(
     books: [],
     convert: { file, destination, progress in
-      progress(ProgressUpdate(progress: 0.5, message: "Mengunduh buku…"))
+      progress(ProgressUpdate(progress: 0.5, message: "Downloading…"))
       if file.lastPathComponent == "bad.acsm" { throw ConversionError.invalidInput }
       let title = file.deletingPathExtension().lastPathComponent
       return ConversionResult(
         fileURL: destination.appendingPathComponent("\(title).epub"),
-        title: title, author: "Penulis", format: .epub, coverData: nil)
+        title: title, author: "Author", format: .epub, coverData: nil)
     })
   model.addFiles([acsm("one.acsm"), acsm("bad.acsm"), acsm("two.acsm")])
   model.convert()

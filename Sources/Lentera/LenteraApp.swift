@@ -15,7 +15,7 @@ struct LenteraApp: App {
     .windowToolbarStyle(.unified)
     .commands {
       CommandGroup(replacing: .newItem) {
-        Button("Pilih File ACSM…") { converter.chooseFiles() }
+        Button("Choose ACSM File…") { converter.chooseFiles() }
           .keyboardShortcut("o")
           .disabled(converter.isConverting)
       }

@@ -9,8 +9,8 @@ struct ContentView: View {
   var body: some View {
     NavigationSplitView {
       List(selection: Binding<AppPage?>(get: { model.page }, set: { if let page = $0 { model.page = page } })) {
-        Label("Konversi", systemImage: "arrow.down.doc").tag(AppPage.convert)
-        Label("Rak Buku", systemImage: "books.vertical")
+        Label("Convert", systemImage: "arrow.down.doc").tag(AppPage.convert)
+        Label("Bookshelf", systemImage: "books.vertical")
           .badge(model.books.count).tag(AppPage.bookshelf)
       }
       .listStyle(.sidebar)
@@ -22,12 +22,12 @@ struct ContentView: View {
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(Color(nsColor: .windowBackgroundColor))
-      .navigationTitle(model.page == .convert ? "Konversi" : "Rak Buku")
+      .navigationTitle(model.page == .convert ? "Convert" : "Bookshelf")
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
-          Button(action: model.chooseFiles) { Label("Tambah File ACSM", systemImage: "plus") }
+          Button(action: model.chooseFiles) { Label("Add ACSM File", systemImage: "plus") }
             .disabled(model.isConverting)
-            .help("Pilih file ACSM (⌘O)")
+            .help("Choose ACSM files (⌘O)")
         }
       }
     }
@@ -43,9 +43,9 @@ struct ContentView: View {
             .font(.system(size: 38, weight: .light))
             .foregroundStyle(.tint)
             .accessibilityHidden(true)
-          Text("Dari ACSM ke buku Anda")
+          Text("From ACSM to your book")
             .font(.title2.weight(.semibold))
-          Text("Unduh buku dalam format EPUB atau PDF dari penyedia.")
+          Text("Download your book in EPUB or PDF from the provider.")
             .foregroundStyle(.secondary)
             .multilineTextAlignment(.center)
         }
@@ -55,19 +55,19 @@ struct ContentView: View {
           GroupBox {
             VStack(spacing: 12) {
               HStack {
-                Text("Simpan ke")
+                Text("Save to")
                 Spacer()
                 Label(model.destination?.lastPathComponent ?? "Downloads", systemImage: "folder")
                   .lineLimit(1).truncationMode(.middle)
-                  .help(model.destination?.path ?? "Folder Downloads")
-                Button("Ubah…", action: model.chooseDestination)
+                  .help(model.destination?.path ?? "Downloads folder")
+                Button("Change…", action: model.chooseDestination)
                   .disabled(model.isConverting)
               }
               Divider()
               HStack {
-                Text("Format hasil")
+                Text("Output format")
                 Spacer()
-                Text("Otomatis (EPUB atau PDF)")
+                Text("Automatic (EPUB or PDF)")
                   .foregroundStyle(.secondary)
               }
             }
@@ -76,7 +76,7 @@ struct ContentView: View {
           if !model.queue.isEmpty { queueList }
           status
         }
-        Text("Format mengikuti buku dari penyedia. Hasil disimpan di Mac ini.")
+        Text("The format follows the book from the provider. Files are saved on this Mac.")
           .font(.callout).foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
       }
@@ -91,11 +91,11 @@ struct ContentView: View {
       Image(systemName: model.queue.isEmpty ? "doc.badge.plus" : "doc.on.doc")
         .font(.system(size: 30, weight: .light)).foregroundStyle(.tint)
         .accessibilityHidden(true)
-      Text(model.queue.isEmpty ? "Seret satu atau beberapa file ACSM ke sini" : "Seret file ACSM untuk menambah antrean")
+      Text(model.queue.isEmpty ? "Drag one or more ACSM files here" : "Drag ACSM files to add to the queue")
         .font(.headline).lineLimit(2).truncationMode(.middle)
         .multilineTextAlignment(.center)
-        .help("File dengan ekstensi .acsm")
-      Button(model.queue.isEmpty ? "Pilih File…" : "Tambah File…", action: model.chooseFiles)
+        .help("Files with the .acsm extension")
+      Button(model.queue.isEmpty ? "Choose Files…" : "Add Files…", action: model.chooseFiles)
         .disabled(model.isConverting)
         .buttonStyle(.bordered)
     }
@@ -135,35 +135,37 @@ struct ContentView: View {
           Text(model.batchStatusText)
             .lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
           Spacer()
-          Button("Batalkan", role: .cancel, action: model.cancel)
+          Button("Cancel", role: .cancel, action: model.cancel)
         }
       }
     } else if model.waitingCount > 0 {
       HStack {
-        Text("\(model.waitingCount) file siap dikonversi.").foregroundStyle(.secondary)
+        Text(model.waitingCount == 1 ? "1 file ready to convert." : "\(model.waitingCount) files ready to convert.")
+          .foregroundStyle(.secondary)
         Spacer()
-        Button("Konversi", action: model.convert)
+        Button("Convert", action: model.convert)
           .buttonStyle(.borderedProminent).controlSize(.large)
           .keyboardShortcut(.defaultAction)
       }
     } else if model.succeededCount > 0 {
       VStack(spacing: 12) {
-        Label("\(model.succeededCount) buku siap dibaca", systemImage: "checkmark.circle.fill")
+        Label(model.succeededCount == 1 ? "1 book ready to read" : "\(model.succeededCount) books ready to read",
+              systemImage: "checkmark.circle.fill")
           .font(.headline).foregroundStyle(.green)
         HStack {
-          Button("Tampilkan Semua di Finder", action: revealResults)
-          Button("Bersihkan", action: model.clearFinished)
+          Button("Reveal All in Finder", action: revealResults)
+          Button("Clear", action: model.clearFinished)
         }
       }
       .frame(maxWidth: .infinity).padding(.top, 4)
     } else if !model.queue.isEmpty {
       HStack {
-        Text("Tidak ada file yang berhasil dikonversi.").foregroundStyle(.secondary)
+        Text("No files were converted.").foregroundStyle(.secondary)
         Spacer()
-        Button("Bersihkan", action: model.clearFinished)
+        Button("Clear", action: model.clearFinished)
       }
     } else {
-      Text("Pilih satu atau beberapa file ACSM untuk memulai.")
+      Text("Choose one or more ACSM files to get started.")
         .foregroundStyle(.secondary)
     }
   }
@@ -178,16 +180,17 @@ struct ContentView: View {
     let visibleBooks = model.visibleBooks
     return VStack(spacing: 0) {
       HStack {
-        Text("\(visibleBooks.count) buku").foregroundStyle(.secondary)
+        Text(visibleBooks.count == 1 ? "1 book" : "\(visibleBooks.count) books")
+          .foregroundStyle(.secondary)
         Spacer()
         Picker("Filter format", selection: $model.shelfFilter) {
           ForEach(ShelfFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
         }
         .pickerStyle(.segmented).frame(width: 220)
         .labelsHidden()
-        .accessibilityLabel("Filter format")
+        .accessibilityLabel("Filter by format")
         Menu {
-          Picker("Urutkan buku", selection: $model.shelfSort) {
+          Picker("Sort books", selection: $model.shelfSort) {
             ForEach(ShelfSort.allCases, id: \.self) { Text($0.rawValue).tag($0) }
           }
         } label: {
@@ -195,21 +198,21 @@ struct ContentView: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
-        .accessibilityLabel("Urutkan buku")
+        .accessibilityLabel("Sort books")
         .accessibilityValue(model.shelfSort.rawValue)
-        .help("Urutkan: \(model.shelfSort.rawValue)")
+        .help("Sort: \(model.shelfSort.rawValue)")
       }
       .padding(24)
       if visibleBooks.isEmpty {
         ContentUnavailableView {
-          Label(model.books.isEmpty ? "Belum Ada Buku" : "Tidak Ada Buku yang Cocok", systemImage: "books.vertical")
+          Label(model.books.isEmpty ? "No Books Yet" : "No Matching Books", systemImage: "books.vertical")
         } description: {
-          Text(model.books.isEmpty ? "Buku yang selesai dikonversi akan muncul di sini." : "Coba judul atau penulis lain, atau tampilkan semua buku.")
+          Text(model.books.isEmpty ? "Converted books will appear here." : "Try a different title or author, or show all books.")
         } actions: {
           if model.books.isEmpty {
-            Button("Tambah File ACSM…", action: model.chooseFiles).disabled(model.isConverting)
+            Button("Add ACSM File…", action: model.chooseFiles).disabled(model.isConverting)
           } else {
-            Button("Tampilkan Semua") {
+            Button("Show All") {
               model.shelfFilter = .all
               model.shelfSearch = ""
             }
@@ -226,7 +229,7 @@ struct ContentView: View {
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-    .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Cari judul atau penulis")
+    .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Search title or author")
   }
 }
 
@@ -248,7 +251,7 @@ private struct QueueRow: View {
       }
       Spacer(minLength: 8)
       if item.status == .failed, item.error != nil {
-        Button("Detail") { model.errorPresentation = item.error }
+        Button("Details") { model.errorPresentation = item.error }
           .buttonStyle(.borderless)
       }
       if item.status == .done, let url = item.resultURL {
@@ -258,16 +261,16 @@ private struct QueueRow: View {
           Image(systemName: "folder")
         }
         .buttonStyle(.borderless)
-        .help("Tampilkan di Finder")
+        .help("Reveal in Finder")
       }
     }
     .padding(.horizontal, 14).padding(.vertical, 10)
     .contentShape(Rectangle())
     .contextMenu {
       if item.status == .done, let url = item.resultURL {
-        Button("Tampilkan di Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+        Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
       }
-      Button("Hapus dari Antrean") { model.removeItem(item.id) }
+      Button("Remove from Queue") { model.removeItem(item.id) }
         .disabled(model.isConverting || item.status == .active)
     }
   }
@@ -290,15 +293,15 @@ private struct QueueRow: View {
   private var statusText: String {
     switch item.status {
     case .waiting:
-      return "Menunggu"
+      return "Waiting"
     case .active:
-      return item.message.isEmpty ? "Memproses…" : "\(item.message) · \(Int(item.progress * 100))%"
+      return item.message.isEmpty ? "Processing…" : "\(item.message) · \(Int(item.progress * 100))%"
     case .done:
-      return "Selesai"
+      return "Done"
     case .failed:
-      return item.error?.summary ?? "Gagal"
+      return item.error?.summary ?? "Failed"
     case .cancelled:
-      return "Dibatalkan"
+      return "Canceled"
     }
   }
 }
@@ -321,7 +324,7 @@ private struct BookCard: View {
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: 6))
       Text(book.title).font(.headline).lineLimit(2).help(book.title)
-      Text(book.author ?? "Penulis tidak tersedia").font(.callout).foregroundStyle(.secondary).lineLimit(1)
+      Text(book.author ?? "Author unavailable").font(.callout).foregroundStyle(.secondary).lineLimit(1)
       Text(book.format.rawValue).font(.caption).foregroundStyle(.secondary)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
@@ -329,10 +332,10 @@ private struct BookCard: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(PressFeedbackButtonStyle(reduceMotion: reduceMotion))
-    .help("Tampilkan \(book.title) di Finder")
-    .accessibilityLabel("Tampilkan \(book.title) di Finder")
+    .help("Reveal \(book.title) in Finder")
+    .accessibilityLabel("Reveal \(book.title) in Finder")
     .contextMenu {
-      Button("Tampilkan di Finder") { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) }
+      Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) }
     }
   }
 }
@@ -362,14 +365,14 @@ private struct ErrorDetailView: View {
           Text(error.summary).foregroundStyle(.secondary).lineSpacing(3).textSelection(.enabled)
         }
       }
-      DisclosureGroup("Detail teknis", isExpanded: $detailExpanded) {
+      DisclosureGroup("Technical details", isExpanded: $detailExpanded) {
         ScrollView { Text(error.detail).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(12) }
           .frame(height: 170).background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8)).padding(.top, 10)
       }
       HStack {
-        Button("Salin detail") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(error.detail, forType: .string) }
+        Button("Copy details") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(error.detail, forType: .string) }
         Spacer()
-        Button("Tutup") { dismiss() }.keyboardShortcut(.defaultAction)
+        Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
       }
     }
     .padding(26).frame(width: 520)

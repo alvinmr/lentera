@@ -16,16 +16,16 @@ enum ConversionError: LocalizedError {
     switch self {
     case .missingTool(let name):
       return
-        "Mesin \(name) belum tersedia. Jalankan Scripts/build-engine.sh lalu build ulang aplikasi."
+        "The \(name) engine is not available. Run Scripts/build-engine.sh and rebuild the app."
     case .invalidInput:
-      return "File ACSM tidak valid atau tidak dapat dibaca."
+      return "The ACSM file is invalid or cannot be read."
     case .commandFailed(let command, let output):
       return FriendlyError.message(command: command, output: output)
     case .outputMissing:
-      return "Unduhan selesai, tetapi file buku tidak ditemukan."
+      return "The download finished, but the book file was not found."
     case .calibreRequired:
       return
-        "Buku tersedia dalam format berbeda. Instal Calibre untuk mengubah EPUB dan PDF, lalu coba lagi."
+        "The book is available in a different format. Install Calibre to convert between EPUB and PDF, then try again."
     }
   }
 }
@@ -50,14 +50,14 @@ struct ConversionService {
 
     let adept = try persistentAdeptDirectory()
     if !fileManager.fileExists(atPath: adept.appendingPathComponent("activation.xml").path) {
-      progress(.init(progress: 0.12, message: "Mengaktifkan perangkat Adobe…"))
+      progress(.init(progress: 0.12, message: "Activating Adobe device…"))
       _ = try await run(
         tools.activate, ["--anonymous", "--random-serial", "--output-dir", adept.path],
         currentDirectory: work)
     }
 
     try Task.checkCancellation()
-    progress(.init(progress: 0.32, message: "Mengunduh buku dari penyedia…"))
+    progress(.init(progress: 0.32, message: "Downloading the book from the provider…"))
     let downloadOutput = try await run(
       tools.downloader,
       ["--adept-directory", adept.path, acsm.path],
@@ -72,7 +72,7 @@ struct ConversionService {
     let decrypted = work.appendingPathComponent("decrypted.\(nativeExtension)")
 
     try Task.checkCancellation()
-    progress(.init(progress: 0.68, message: "Membuka proteksi buku…"))
+    progress(.init(progress: 0.68, message: "Removing book protection…"))
     _ = try await run(
       tools.remove,
       ["--adept-directory", adept.path, "--output-file", decrypted.path, encrypted.path],
@@ -82,7 +82,7 @@ struct ConversionService {
     let metadata = BookMetadata.read(from: decrypted, fallbackTitle: encrypted.deletingPathExtension().lastPathComponent)
 
     try Task.checkCancellation()
-    progress(.init(progress: 0.96, message: "Menyimpan hasil…"))
+    progress(.init(progress: 0.96, message: "Saving…"))
     try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
     let finalURL = uniqueDestination(
       directory: destination,
@@ -90,7 +90,7 @@ struct ConversionService {
       extension: format.fileExtension
     )
     try fileManager.copyItem(at: decrypted, to: finalURL)
-    progress(.init(progress: 1, message: "Selesai"))
+    progress(.init(progress: 1, message: "Done"))
     return ConversionResult(
       fileURL: finalURL,
       title: metadata.title,
@@ -162,7 +162,7 @@ struct ConversionService {
     let invalid = CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/\\:"))
     let cleaned = name.components(separatedBy: invalid).joined(separator: " ")
       .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
-    return String(cleaned.prefix(120)).isEmpty ? "Buku" : String(cleaned.prefix(120))
+    return String(cleaned.prefix(120)).isEmpty ? "Book" : String(cleaned.prefix(120))
   }
 
   private func uniqueDestination(directory: URL, baseName: String, extension ext: String) -> URL {
@@ -242,16 +242,16 @@ struct BookMetadata: Sendable {
 
   static func read(from file: URL, fallbackTitle: String) -> BookMetadata {
     guard file.pathExtension.lowercased() == "epub" else {
-      return BookMetadata(title: fallbackTitle, author: "Penulis tidak tersedia", coverData: nil)
+      return BookMetadata(title: fallbackTitle, author: "Author unavailable", coverData: nil)
     }
 
     guard let container = xml(unzipData(file, entry: "META-INF/container.xml")),
       let packagePath = value(container, "//*[local-name()='rootfile']/@full-path"),
       let package = xml(unzipData(file, entry: packagePath))
-    else { return BookMetadata(title: fallbackTitle, author: "Penulis tidak tersedia", coverData: nil) }
+    else { return BookMetadata(title: fallbackTitle, author: "Author unavailable", coverData: nil) }
 
     let title = value(package, "//*[local-name()='metadata']/*[local-name()='title']") ?? fallbackTitle
-    let author = value(package, "//*[local-name()='metadata']/*[local-name()='creator']") ?? "Penulis tidak tersedia"
+    let author = value(package, "//*[local-name()='metadata']/*[local-name()='creator']") ?? "Author unavailable"
     let coverID = value(package, "//*[local-name()='meta'][@name='cover']/@content")
     let items = (try? package.nodes(forXPath: "//*[local-name()='manifest']/*[local-name()='item']")) ?? []
     let elements = items.compactMap { $0 as? XMLElement }
@@ -306,20 +306,20 @@ enum FriendlyError {
   static func message(command: String, output: String) -> String {
     let messages = [
       "E_LIC_ALREADY_FULFILLED_BY_ANOTHER_USER":
-        "ACSM ini sudah dibuka memakai perangkat atau akun lain. Unduh ACSM baru dari penyedia, atau gunakan otorisasi yang sama.",
+        "This ACSM was already opened with another device or account. Download a new ACSM from the provider, or use the same authorization.",
       "E_GOOGLE_DEVICE_LIMIT_REACHED":
-        "Batas perangkat Google Play telah tercapai. Hapus otorisasi perangkat lama atau hubungi dukungan Google.",
+        "The Google Play device limit has been reached. Remove an old device authorization or contact Google support.",
       "E_ADEPT_REQUEST_EXPIRED":
-        "File ACSM telah kedaluwarsa. Unduh salinan ACSM baru dari penyedia buku.",
+        "This ACSM file has expired. Download a fresh ACSM copy from the book provider.",
       "E_LIC_LICENSE_SIGN_ERROR":
-        "Penyedia buku gagal menandatangani lisensi. Tunggu beberapa menit lalu coba lagi.",
+        "The book provider failed to sign the license. Wait a few minutes and try again.",
       "HTTP Error code 429":
-        "Penyedia buku membatasi permintaan. Tunggu 5–15 menit lalu coba lagi.",
+        "The book provider is rate limiting requests. Wait 5–15 minutes and try again.",
     ]
     if let match = messages.first(where: { output.contains($0.key) }) { return match.value }
     let detail = output.trimmingCharacters(in: .whitespacesAndNewlines)
     return detail.isEmpty
-      ? "\(command) gagal tanpa rincian tambahan."
-      : "\(command) gagal. Buka detail teknis untuk melihat output lengkap."
+      ? "\(command) failed without further details."
+      : "\(command) failed. Open the technical details to see the full output."
   }
 }

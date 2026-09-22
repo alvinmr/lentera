@@ -5,19 +5,19 @@ import Testing
 
 @Test func mapsExpiredRequestToHelpfulMessage() {
   let message = FriendlyError.message(command: "acsmdownloader", output: "E_ADEPT_REQUEST_EXPIRED")
-  #expect(message.contains("kedaluwarsa"))
+  #expect(message.contains("expired"))
 }
 
 @Test func keepsUnknownToolOutputOutOfTheSummary() {
   let message = FriendlyError.message(command: "adept_remove", output: "custom failure")
   #expect(!message.contains("custom failure"))
-  #expect(message.contains("detail teknis"))
+  #expect(message.contains("technical details"))
 }
 
 @Test func errorPresentationPreservesTechnicalOutput() {
   let error = ErrorPresentation.from(
     ConversionError.commandFailed("adept_remove", "custom failure"))
-  #expect(error.summary.contains("detail teknis"))
+  #expect(error.summary.contains("technical details"))
   #expect(error.detail == "custom failure")
 }
 

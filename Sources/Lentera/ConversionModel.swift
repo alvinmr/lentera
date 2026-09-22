@@ -16,15 +16,15 @@ enum AppPage: String, CaseIterable, Sendable {
 }
 
 enum ShelfFilter: String, CaseIterable, Sendable {
-  case all = "Semua"
+  case all = "All"
   case epub = "EPUB"
   case pdf = "PDF"
 }
 
 enum ShelfSort: String, CaseIterable {
-  case newest = "Terbaru"
-  case oldest = "Terlama"
-  case title = "Judul A–Z"
+  case newest = "Newest"
+  case oldest = "Oldest"
+  case title = "Title A–Z"
 }
 
 struct BookRecord: Codable, Identifiable, Sendable {
@@ -59,20 +59,20 @@ struct ErrorPresentation: Identifiable {
       switch conversion {
       case .commandFailed(let command, let output):
         return ErrorPresentation(
-          title: "Konversi gagal",
+          title: "Conversion failed",
           summary: FriendlyError.message(command: command, output: output),
-          detail: output.isEmpty ? "Tidak ada keluaran dari \(command)." : output
+          detail: output.isEmpty ? "No output from \(command)." : output
         )
       default:
         return ErrorPresentation(
-          title: "Konversi gagal",
+          title: "Conversion failed",
           summary: conversion.localizedDescription,
           detail: String(describing: conversion)
         )
       }
     }
     return ErrorPresentation(
-      title: "Konversi gagal",
+      title: "Conversion failed",
       summary: error.localizedDescription,
       detail: String(describing: error)
     )
@@ -127,7 +127,7 @@ final class ConversionModel {
     guard isConverting else { return "" }
     let position = min(batchCompleted + 1, batchTotal)
     let name = queue.first { $0.status == .active }?.fileURL.lastPathComponent ?? ""
-    return batchTotal > 1 ? "Memproses \(position) dari \(batchTotal) · \(name)" : name
+    return batchTotal > 1 ? "Converting \(position) of \(batchTotal) · \(name)" : name
   }
 
   var visibleBooks: [BookRecord] {
@@ -197,7 +197,7 @@ final class ConversionModel {
     panel.allowedContentTypes = [UTType(filenameExtension: "acsm") ?? .data]
     panel.allowsMultipleSelection = true
     panel.canChooseDirectories = false
-    panel.prompt = "Tambah"
+    panel.prompt = "Add"
     if panel.runModal() == .OK, !panel.urls.isEmpty { addFiles(panel.urls) }
   }
 
@@ -207,7 +207,7 @@ final class ConversionModel {
     panel.canChooseFiles = false
     panel.canChooseDirectories = true
     panel.canCreateDirectories = true
-    panel.prompt = "Pilih"
+    panel.prompt = "Choose"
     if panel.runModal() == .OK { destination = panel.url }
   }
 
@@ -242,8 +242,8 @@ final class ConversionModel {
     if added > 0 { page = .convert }
     if !rejected.isEmpty {
       errorPresentation = ErrorPresentation(
-        title: rejected.count == 1 ? "File tidak didukung" : "Sebagian file tidak didukung",
-        summary: "Hanya file dengan ekstensi .acsm yang dapat dikonversi.",
+        title: rejected.count == 1 ? "Unsupported file" : "Some files are unsupported",
+        summary: "Only files with the .acsm extension can be converted.",
         detail: rejected.map(\.path).joined(separator: "\n")
       )
     }
@@ -278,7 +278,7 @@ final class ConversionModel {
         let id = queue[index].id
         let acsm = queue[index].fileURL
         queue[index].status = .active
-        queue[index].message = "Menyiapkan…"
+        queue[index].message = "Preparing…"
         do {
           let result = try await convertOperation(acsm, outputDirectory) { [weak self] update in
             Task { @MainActor in
@@ -294,7 +294,7 @@ final class ConversionModel {
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].status = .done
             queue[current].progress = 1
-            queue[current].message = "Selesai"
+            queue[current].message = "Done"
             queue[current].resultURL = result.fileURL
           }
           addBook(result)
@@ -302,7 +302,7 @@ final class ConversionModel {
           batchCompleted += 1
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].status = .cancelled
-            queue[current].message = "Dibatalkan"
+            queue[current].message = "Canceled"
           }
           break
         } catch {
@@ -321,7 +321,7 @@ final class ConversionModel {
   func cancel() {
     guard isConverting, conversionTask != nil else { return }
     if let active = queue.firstIndex(where: { $0.status == .active }) {
-      queue[active].message = "Membatalkan…"
+      queue[active].message = "Canceling…"
     }
     conversionTask?.cancel()
   }
