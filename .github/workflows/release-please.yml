@@ -82,25 +82,13 @@ jobs:
           LENTERA_BUILD: ${{ github.run_number }}
         run: ./Scripts/build-app.sh
 
-      - name: Package app
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: ditto -c -k --sequesterRsrc --keepParent build/Lentera.app "build/Lentera-v${VERSION}-macOS.zip"
-
-      - name: Verify package
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
-        run: shasum -a 256 "build/Lentera-v${VERSION}-macOS.zip"
-
       - name: Build DMG
         run: ./Scripts/build-dmg.sh
 
       - uses: actions/upload-artifact@v4
         with:
           name: Lentera-macOS
-          path: |
-            build/Lentera-v*-macOS.zip
-            build/Lentera-v*-macOS.dmg
+          path: build/Lentera-v*-macOS.dmg
 
       - name: Upload release asset
         if: needs.release-please.outputs.release_created == 'true' || inputs.release_tag != ''
@@ -108,7 +96,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
           TAG_NAME: ${{ inputs.release_tag || needs.release-please.outputs.tag_name }}
-        run: gh release upload "$TAG_NAME" "build/Lentera-v${VERSION}-macOS.zip" "build/Lentera-v${VERSION}-macOS.dmg" --clobber
+        run: gh release upload "$TAG_NAME" "build/Lentera-v${VERSION}-macOS.dmg" --clobber
 
       - name: Generate Sparkle appcast
         if: needs.release-please.outputs.release_created == 'true' || inputs.release_tag != ''
