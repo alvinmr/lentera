@@ -115,8 +115,10 @@ jobs:
           tar -xJf "$RUNNER_TEMP/Sparkle.tar.xz" -C "$RUNNER_TEMP"
           mkdir -p updates
           cp "build/Lentera-v${VERSION}-macOS.dmg" updates/
+          gh release view "$TAG_NAME" --json body --jq .body > "updates/Lentera-v${VERSION}-macOS.md"
           printf '%s' "$SPARKLE_PRIVATE_KEY" | "$RUNNER_TEMP/bin/generate_appcast" \
             --ed-key-file - \
+            --embed-release-notes \
             --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/" \
             --link "https://github.com/${GITHUB_REPOSITORY}/releases" \
             updates
