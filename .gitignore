@@ -1,6 +1,7 @@
 .build/
 build/
 .DS_Store
+.sparkle-tools/
 
 .vscode/
 Vendor/libgourou/utils/acsmdownloader

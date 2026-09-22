@@ -2,24 +2,44 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDisplayName</key><string>Lentera</string>
-    <key>CFBundleExecutable</key><string>Lentera</string>
-    <key>CFBundleIdentifier</key><string>app.lentera.converter</string>
-    <key>CFBundleName</key><string>Lentera</string>
-    <key>CFBundleIconFile</key><string>Lentera.icns</string>
-    <key>CFBundlePackageType</key><string>APPL</string>
-    <key>CFBundleShortVersionString</key><string>0.1.0</string>
-    <key>CFBundleVersion</key><string>1</string>
-    <key>LSMinimumSystemVersion</key><string>14.0</string>
-    <key>NSHighResolutionCapable</key><true/>
-    <key>CFBundleDocumentTypes</key>
-    <array>
-        <dict>
-            <key>CFBundleTypeName</key><string>Adobe Content Server Message</string>
-            <key>CFBundleTypeExtensions</key><array><string>acsm</string></array>
-            <key>CFBundleTypeRole</key><string>Viewer</string>
-            <key>LSHandlerRank</key><string>Default</string>
-        </dict>
-    </array>
+	<key>CFBundleDisplayName</key>
+	<string>Lentera</string>
+	<key>CFBundleDocumentTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleTypeExtensions</key>
+			<array>
+				<string>acsm</string>
+			</array>
+			<key>CFBundleTypeName</key>
+			<string>Adobe Content Server Message</string>
+			<key>CFBundleTypeRole</key>
+			<string>Viewer</string>
+			<key>LSHandlerRank</key>
+			<string>Default</string>
+		</dict>
+	</array>
+	<key>CFBundleExecutable</key>
+	<string>Lentera</string>
+	<key>CFBundleIconFile</key>
+	<string>Lentera.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>app.lentera.converter</string>
+	<key>CFBundleName</key>
+	<string>Lentera</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1.0</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>14.0</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/alvinmr/lentera/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>2974qWazIbgENrYZejlDQ5LzSkU0HuymXbcwkuXnJ7Q=</string>
 </dict>
 </plist>

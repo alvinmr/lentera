@@ -66,6 +66,7 @@ jobs:
       - name: Build app
         env:
           LENTERA_VERSION: ${{ steps.version.outputs.version }}
+          LENTERA_BUILD: ${{ github.run_number }}
         run: ./Scripts/build-app.sh
 
       - name: Package app
@@ -95,3 +96,27 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
           TAG_NAME: ${{ inputs.release_tag || needs.release-please.outputs.tag_name }}
         run: gh release upload "$TAG_NAME" "build/Lentera-v${VERSION}-macOS.zip" "build/Lentera-v${VERSION}-macOS.dmg" --clobber
+
+      - name: Generate Sparkle appcast
+        if: needs.release-please.outputs.release_created == 'true' || inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+          VERSION: ${{ steps.version.outputs.version }}
+          TAG_NAME: ${{ inputs.release_tag || needs.release-please.outputs.tag_name }}
+        run: |
+          if [[ -z "$SPARKLE_PRIVATE_KEY" ]]; then
+            echo "::warning title=Sparkle appcast skipped::Set the SPARKLE_PRIVATE_KEY repository secret to publish auto-updates."
+            exit 0
+          fi
+          curl -fsSL -o "$RUNNER_TEMP/Sparkle.tar.xz" \
+            "https://github.com/sparkle-project/Sparkle/releases/download/2.10.0/Sparkle-2.10.0.tar.xz"
+          tar -xJf "$RUNNER_TEMP/Sparkle.tar.xz" -C "$RUNNER_TEMP"
+          mkdir -p updates
+          cp "build/Lentera-v${VERSION}-macOS.dmg" updates/
+          printf '%s' "$SPARKLE_PRIVATE_KEY" | "$RUNNER_TEMP/bin/generate_appcast" \
+            --ed-key-file - \
+            --download-url-prefix "https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG_NAME}/" \
+            --link "https://github.com/${GITHUB_REPOSITORY}/releases" \
+            updates
+          gh release upload "$TAG_NAME" updates/appcast.xml --clobber

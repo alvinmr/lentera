@@ -12,6 +12,8 @@ cp "$ROOT/.build/release/Lentera" "$APP/Contents/MacOS/Lentera"
 cp "$ROOT/Support/Info.plist" "$APP/Contents/Info.plist"
 VERSION="${LENTERA_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$ROOT/Support/Info.plist")}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $VERSION" "$APP/Contents/Info.plist"
+BUILD="${LENTERA_BUILD:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/Support/Info.plist")}"
+/usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
 cp "$ROOT/Support/Lentera.icns" "$APP/Contents/Resources/Lentera.icns"
 cp -R "$ROOT/.build/release/Lentera_Lentera.bundle" "$APP/Contents/Resources/"
 
@@ -54,7 +56,24 @@ if [[ -f /opt/homebrew/opt/brotli/lib/libbrotlicommon.1.dylib ]]; then
   install_name_tool -change '@rpath/libbrotlicommon.1.dylib' '@loader_path/libbrotlicommon.1.dylib' "$LIB/libbrotlidec.1.dylib"
 fi
 
+# Embed Sparkle so the app can install its own updates.
+SPARKLE_SOURCE=$(find "$ROOT/.build/artifacts" -maxdepth 6 -type d -name Sparkle.framework -path '*macos-*' 2>/dev/null | head -n 1)
+if [[ -n "$SPARKLE_SOURCE" ]]; then
+  mkdir -p "$APP/Contents/Frameworks"
+  ditto "$SPARKLE_SOURCE" "$APP/Contents/Frameworks/Sparkle.framework"
+  # Lentera is not sandboxed, so Sparkle's XPC services are not needed.
+  rm -rf "$APP/Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices" \
+         "$APP/Contents/Frameworks/Sparkle.framework/XPCServices"
+  install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Lentera" 2>/dev/null || true
+fi
+
 codesign --force --sign - "$LIB"/* "$BUNDLE"/acsmdownloader "$BUNDLE"/adept_activate "$BUNDLE"/adept_remove "$APP/Contents/MacOS/Lentera"
-codesign --force --deep --sign - "$APP"
+if [[ -d "$APP/Contents/Frameworks/Sparkle.framework" ]]; then
+  SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+  codesign --force --sign - "$SPARKLE/Versions/B/Autoupdate"
+  codesign --force --sign - "$SPARKLE/Versions/B/Updater.app"
+  codesign --force --sign - "$SPARKLE"
+fi
+codesign --force --sign - "$APP"
 
 echo "Built $APP"

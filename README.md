@@ -20,6 +20,18 @@ The app is ad-hoc signed and is **not Apple-notarized**. If macOS blocks it, att
 
 Lentera needs an ACSM file for a book you are authorized to access. An ACSM file is a license message, not the book itself; the provider and Adobe services still need to fulfill the license during conversion.
 
+## Updates
+
+Lentera updates itself with [Sparkle](https://sparkle-project.org). Release builds embed a signed appcast, so installed apps can use **Check for Updates…** from the application menu. Sparkle validates each update with the EdDSA signature, so an Apple Developer ID certificate is not required; the app is ad-hoc signed, and macOS may occasionally ask you to confirm opening Lentera after an update.
+
+Maintainers must create the Sparkle signing key once before publishing a release:
+
+```sh
+Scripts/setup-sparkle.sh
+```
+
+The wizard downloads Sparkle's tools into `.sparkle-tools/` (git-ignored), stores the private key in your login Keychain, writes `SUPublicEDKey` into `Support/Info.plist`, and sets the `SPARKLE_PRIVATE_KEY` GitHub Actions secret. Commit the Info.plist change. Each release then publishes a signed `appcast.xml` that the app reads from `https://github.com/alvinmr/lentera/releases/latest/download/appcast.xml`.
+
 ## Build From Source
 
 ### Requirements
