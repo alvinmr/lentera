@@ -129,6 +129,12 @@ Scripts/setup-tap-token.sh
 
 Without the secret, releases still publish and the cask update is skipped with a warning.
 
+Release Please opens its pull request with the default `GITHUB_TOKEN`, and events from that token do not start workflows, so CI does not run on release PRs unless you store a personal token as `RELEASE_PLEASE_TOKEN`:
+
+```sh
+Scripts/setup-release-token.sh
+```
+
 You can also run **Actions > Release > Run workflow** to verify a build without publishing a new version. The DMG is available as a workflow artifact. GitHub Actions must be allowed to create pull requests under **Settings > Actions > General > Workflow permissions**.
 
 ## Privacy
