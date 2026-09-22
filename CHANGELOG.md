@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.0](https://github.com/alvinmr/lentera/compare/v0.4.0...v0.5.0) (2026-09-22)
+
+
+### Features
+
+* add a Help menu with docs and release notes links ([e4621e5](https://github.com/alvinmr/lentera/commit/e4621e58a894d063f5c9fc010b6140d2b5f27592))
+
 ## [0.4.0](https://github.com/alvinmr/lentera/compare/v0.3.0...v0.4.0) (2026-09-22)
 
 
