@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.0.0](https://github.com/alvinmr/lentera/compare/v0.5.0...v1.0.0) (2026-09-22)
+
+
+### Features
+
+* add a Settings window ([159d492](https://github.com/alvinmr/lentera/commit/159d492e375d8eb1edaeee7e59be1dafc6bbd632))
+* log conversions and batch outcomes ([d76652e](https://github.com/alvinmr/lentera/commit/d76652e09062847d9c79611f4574b83ed917422b))
+* notify when a batch finishes ([866e88c](https://github.com/alvinmr/lentera/commit/866e88c79bba95aad6a95d57e29034fc350d8a7e))
+* render PDF covers ([5971aad](https://github.com/alvinmr/lentera/commit/5971aad42a10e19bfb6632d4ca07ef94ab0687d8))
+* retry failed queue items ([16aac30](https://github.com/alvinmr/lentera/commit/16aac30834321bc033aef2f3d596e003e8f06c1c))
+* skip ACSM files that were already converted ([122ebeb](https://github.com/alvinmr/lentera/commit/122ebeb46187060ca7f75903d5bbef988eb34ba0))
+
+
+### Miscellaneous Chores
+
+* target the 1.0.0 release ([8821238](https://github.com/alvinmr/lentera/commit/8821238b41bc483a3c82ef223df0f768f235b09d))
+
 ## [0.5.0](https://github.com/alvinmr/lentera/compare/v0.4.0...v0.5.0) (2026-09-22)
 
 
