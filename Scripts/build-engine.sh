@@ -13,9 +13,7 @@ if [[ ! -d "$SOURCE" ]]; then
   exit 1
 fi
 
-if [[ ! -f "$DEPS/.complete" ]]; then
-  "$ROOT/Scripts/build-engine-deps.sh"
-fi
+"$ROOT/Scripts/build-engine-deps.sh"
 
 export MACOSX_DEPLOYMENT_TARGET="$TARGET"
 SDKROOT="$(xcrun --sdk macosx --show-sdk-path)"

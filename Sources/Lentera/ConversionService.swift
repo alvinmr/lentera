@@ -72,10 +72,12 @@ nonisolated struct ConversionService: Sendable {
     }
     if !FileManager.default.fileExists(atPath: adept.appendingPathComponent("activation.xml").path) {
       progress(.init(progress: 0.12, message: "Activating Adobe device…"))
+      let staging = work.appendingPathComponent("adept", isDirectory: true)
       _ = try await run(
         resolvedTools.activate,
-        ["--anonymous", "--random-serial", "--output-dir", adept.path],
+        ["--anonymous", "--random-serial", "--output-dir", staging.path],
         currentDirectory: work)
+      try installActivation(from: staging, to: adept)
     }
 
     try Task.checkCancellation()
@@ -124,6 +126,17 @@ nonisolated struct ConversionService: Sendable {
     )
   }
 
+  private func installActivation(from staging: URL, to adept: URL) throws {
+    try FileManager.default.createDirectory(at: adept, withIntermediateDirectories: true)
+    for file in try FileManager.default.contentsOfDirectory(
+      at: staging, includingPropertiesForKeys: nil)
+    {
+      let destination = adept.appendingPathComponent(file.lastPathComponent)
+      try? FileManager.default.removeItem(at: destination)
+      try FileManager.default.moveItem(at: file, to: destination)
+    }
+  }
+
   private func persistentAdeptDirectory() throws -> URL {
     let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("Lentera", isDirectory: true)
@@ -160,6 +173,13 @@ nonisolated struct ConversionService: Sendable {
         process.currentDirectoryURL = currentDirectory
         process.standardOutput = pipe
         process.standardError = pipe
+        let modules = executable.deletingLastPathComponent()
+          .appendingPathComponent("lib/ossl-modules", isDirectory: true)
+        if FileManager.default.fileExists(atPath: modules.path) {
+          var environment = ProcessInfo.processInfo.environment
+          environment["OPENSSL_MODULES"] = modules.path
+          process.environment = environment
+        }
         defer { handle.clear() }
         try handle.start(process)
         let data = pipe.fileHandleForReading.readDataToEndOfFile()

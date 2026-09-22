@@ -28,6 +28,10 @@ mkdir -p "$LIB"
 DEPS_LIB="$ROOT/.engine-deps/prefix/lib"
 if [[ -d "$DEPS_LIB" ]]; then
   find "$DEPS_LIB" -maxdepth 1 -type f -name '*.dylib' -exec cp {} "$LIB/" \;
+  if [[ -d "$DEPS_LIB/ossl-modules" ]]; then
+    mkdir -p "$LIB/ossl-modules"
+    cp "$DEPS_LIB"/ossl-modules/*.dylib(N) "$LIB/ossl-modules/"
+  fi
 fi
 
 # Embed Sparkle so the app can install its own updates.
@@ -41,7 +45,8 @@ if [[ -n "$SPARKLE_SOURCE" ]]; then
   install_name_tool -add_rpath "@executable_path/../Frameworks" "$APP/Contents/MacOS/Lentera" 2>/dev/null || true
 fi
 
-codesign --force --sign - "$LIB"/* "$BUNDLE"/acsmdownloader "$BUNDLE"/adept_activate "$BUNDLE"/adept_remove "$APP/Contents/MacOS/Lentera"
+codesign --force --sign - "$LIB"/*.dylib "$LIB"/ossl-modules/*.dylib(N) \
+  "$BUNDLE"/acsmdownloader "$BUNDLE"/adept_activate "$BUNDLE"/adept_remove "$APP/Contents/MacOS/Lentera"
 if [[ -d "$APP/Contents/Frameworks/Sparkle.framework" ]]; then
   SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
   codesign --force --sign - "$SPARKLE/Versions/B/Autoupdate"

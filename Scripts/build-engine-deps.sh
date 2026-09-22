@@ -29,7 +29,8 @@ LIBZIP_SHA256=82e9f2f2421f9d7c2466bbc3173cd09595a88ea37db0d559a9d0a2dc60dc722e
 PUGIXML_VERSION=1.16
 PUGIXML_SHA256=4cee1ca4aad395170f4c7a07824f3bdd41f28316c6e1e1090a1425b278ec0b4b
 
-if [[ -f "$PREFIX/.complete" ]]; then
+SCRIPT_HASH="$(shasum -a 256 "$0" | awk '{print $1}')"
+if [[ -f "$PREFIX/.complete" && "$(<"$PREFIX/.complete")" == "$SCRIPT_HASH" ]]; then
   echo "Engine dependencies already built at $PREFIX"
   exit 0
 fi
@@ -50,10 +51,11 @@ rm -rf "$SRC/openssl-$OPENSSL_VERSION"
 tar -xzf "$SRC/openssl-$OPENSSL_VERSION.tar.gz" -C "$SRC"
 (
   cd "$SRC/openssl-$OPENSSL_VERSION"
-  ./Configure darwin64-arm64-cc shared no-tests no-legacy \
+  ./Configure darwin64-arm64-cc shared no-tests \
     --prefix="$PREFIX" --openssldir="$PREFIX/ssl" CC="$CC" \
     -isysroot "$SDKROOT" "-mmacosx-version-min=$TARGET"
   make -j"$JOBS" build_libs
+  make -j"$JOBS" build_modules
   make install_sw
 )
 
@@ -124,5 +126,14 @@ for lib in "$PREFIX"/lib/*.dylib(N); do
   done
 done
 
-touch "$PREFIX/.complete"
+# The provider modules load into the engine tools. Point them at the libcrypto
+# next to them, so they reuse the copy that is already in the app bundle.
+for module in "$PREFIX"/lib/ossl-modules/*.dylib(N); do
+  for dependency in "$PREFIX"/lib/*.dylib(N); do
+    [[ -L "$dependency" ]] && continue
+    install_name_tool -change "$dependency" "@loader_path/../${dependency:t}" "$module" 2>/dev/null || true
+  done
+done
+
+echo "$SCRIPT_HASH" > "$PREFIX/.complete"
 echo "Engine dependencies ready at $PREFIX"
