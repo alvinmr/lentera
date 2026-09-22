@@ -1,4 +1,4 @@
-// swift-tools-version: 6.0
+// swift-tools-version: 6.2
 import PackageDescription
 
 let package = Package(
@@ -12,7 +12,8 @@ let package = Package(
             name: "Lentera",
             dependencies: [.product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/Lentera",
-            resources: [.process("Resources")]
+            resources: [.process("Resources")],
+            swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
         .testTarget(name: "LenteraTests", dependencies: ["Lentera"])
     ]

@@ -7,6 +7,16 @@ private func acsm(_ name: String) -> URL {
   URL(fileURLWithPath: "/tmp/\(name)")
 }
 
+private func label(_ state: QueueItemState) -> String {
+  switch state {
+  case .waiting: "waiting"
+  case .active: "active"
+  case .done: "done"
+  case .failed: "failed"
+  case .cancelled: "cancelled"
+  }
+}
+
 @MainActor
 private func waitForBatch(_ model: ConversionModel) async throws {
   for _ in 0..<600 where model.isConverting {
@@ -19,7 +29,7 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   let model = ConversionModel(books: [])
   model.addFiles([acsm("a.acsm"), acsm("notes.epub"), acsm("A.ACSM"), acsm("c.acsm")])
   #expect(model.queue.map(\.fileURL.lastPathComponent) == ["a.acsm", "c.acsm"])
-  #expect(model.queue.allSatisfy { $0.status == .waiting })
+  #expect(model.queue.allSatisfy { $0.isWaiting })
 }
 
 @MainActor @Test func addFilesReportsRejectedFiles() {
@@ -43,8 +53,8 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   model.addFiles([acsm("one.acsm"), acsm("bad.acsm"), acsm("two.acsm")])
   model.convert()
   try await waitForBatch(model)
-  #expect(model.queue.map(\.status) == [.done, .failed, .done])
-  #expect(model.queue[1].error != nil)
+  #expect(model.queue.map { label($0.state) } == ["done", "failed", "done"])
+  #expect(model.queue[1].failure != nil)
   #expect(model.books.map(\.title) == ["two", "one"])
   #expect(model.succeededCount == 2)
   #expect(model.waitingCount == 0)
@@ -59,14 +69,14 @@ private func waitForBatch(_ model: ConversionModel) async throws {
     })
   model.addFiles([acsm("one.acsm"), acsm("two.acsm")])
   model.convert()
-  for _ in 0..<600 where model.queue.first?.status != .active {
+  for _ in 0..<600 where model.queue.first?.isActive != true {
     try await Task.sleep(for: .milliseconds(10))
   }
-  #expect(model.queue.first?.status == .active)
+  #expect(model.queue.first?.isActive == true)
   model.cancel()
   try await waitForBatch(model)
-  #expect(model.queue[0].status == .cancelled)
-  #expect(model.queue[1].status == .waiting)
+  #expect(model.queue[0].state == .cancelled)
+  #expect(model.queue[1].isWaiting)
 }
 
 @MainActor @Test func clearFinishedKeepsWaitingItems() {

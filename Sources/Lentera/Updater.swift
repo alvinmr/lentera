@@ -1,4 +1,3 @@
-import Combine
 import Observation
 import Sparkle
 import SwiftUI
@@ -7,13 +6,14 @@ import SwiftUI
 @Observable
 final class CheckForUpdatesModel {
   private(set) var canCheckForUpdates = false
-  @ObservationIgnored private var cancellable: AnyCancellable?
+  @ObservationIgnored private var observation: NSKeyValueObservation?
 
   init(updater: SPUUpdater) {
     canCheckForUpdates = updater.canCheckForUpdates
-    cancellable = updater.publisher(for: \.canCheckForUpdates)
-      .receive(on: RunLoop.main)
-      .sink { [weak self] in self?.canCheckForUpdates = $0 }
+    observation = updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, change in
+      guard let value = change.newValue else { return }
+      Task { @MainActor in self?.canCheckForUpdates = value }
+    }
   }
 }
 

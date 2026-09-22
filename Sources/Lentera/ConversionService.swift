@@ -1,11 +1,18 @@
 import Foundation
+import os
 
-struct ProgressUpdate: Sendable {
+// Bundle.module is generated main-actor-isolated under default actor isolation,
+// so resolve the SwiftPM resource bundle from the executable's resources instead.
+private nonisolated let resourceBundle =
+  Bundle.main.url(forResource: "Lentera_Lentera", withExtension: "bundle")
+  .flatMap(Bundle.init(url:)) ?? .main
+
+nonisolated struct ProgressUpdate: Sendable {
   let progress: Double
   let message: String
 }
 
-enum ConversionError: LocalizedError {
+nonisolated enum ConversionError: LocalizedError {
   case missingTool(String)
   case invalidInput
   case commandFailed(String, String)
@@ -30,7 +37,7 @@ enum ConversionError: LocalizedError {
   }
 }
 
-struct ConversionService: Sendable {
+nonisolated struct ConversionService: Sendable {
   @concurrent func convert(
     acsm: URL,
     destination: URL,
@@ -173,35 +180,36 @@ struct ConversionService: Sendable {
   }
 }
 
-private final class RunningProcess: @unchecked Sendable {
-  private let lock = NSLock()
-  private var process: Process?
-  private var terminationRequested = false
+private nonisolated final class RunningProcess: @unchecked Sendable {
+  private struct State {
+    var process: Process?
+    var terminationRequested = false
+  }
 
   // Start and cancellation share a lock so terminate never precedes launch.
+  private let state = OSAllocatedUnfairLock(initialState: State())
+
   func start(_ process: Process) throws {
-    lock.lock()
-    defer { lock.unlock() }
-    guard !terminationRequested else { throw CancellationError() }
-    try process.run()
-    self.process = process
+    try state.withLock { state in
+      guard !state.terminationRequested else { throw CancellationError() }
+      try process.run()
+      state.process = process
+    }
   }
 
   func clear() {
-    lock.lock()
-    process = nil
-    lock.unlock()
+    state.withLock { $0.process = nil }
   }
 
   func terminate() {
-    lock.lock()
-    defer { lock.unlock() }
-    terminationRequested = true
-    if let process, process.isRunning { process.terminate() }
+    state.withLock { state in
+      state.terminationRequested = true
+      if let process = state.process, process.isRunning { process.terminate() }
+    }
   }
 }
 
-struct ToolLocator {
+nonisolated struct ToolLocator {
   let activate: URL
   let downloader: URL
   let remove: URL
@@ -215,7 +223,7 @@ struct ToolLocator {
   }
 
   private static func tool(_ name: String) throws -> URL {
-    let bundled = Bundle.module.url(forResource: name, withExtension: nil)
+    let bundled = resourceBundle.url(forResource: name, withExtension: nil)
     if let bundled, FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
     guard let external = firstExisting(["/opt/homebrew/bin/\(name)", "/usr/local/bin/\(name)"])
     else {
@@ -231,7 +239,7 @@ struct ToolLocator {
   }
 }
 
-struct BookMetadata: Sendable {
+nonisolated struct BookMetadata: Sendable {
   let title: String
   let author: String
   let coverData: Data?
@@ -298,7 +306,7 @@ struct BookMetadata: Sendable {
 
 }
 
-enum FriendlyError {
+nonisolated enum FriendlyError {
   static func message(command: String, output: String) -> String {
     let messages = [
       "E_LIC_ALREADY_FULFILLED_BY_ANOTHER_USER":

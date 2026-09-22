@@ -3,31 +3,31 @@ import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
-enum OutputFormat: String, CaseIterable, Codable, Identifiable, Sendable {
+nonisolated enum OutputFormat: String, CaseIterable, Codable, Identifiable, Sendable {
   case epub = "EPUB"
   case pdf = "PDF"
   var id: Self { self }
   var fileExtension: String { rawValue.lowercased() }
 }
 
-enum AppPage: String, CaseIterable, Sendable {
+nonisolated enum AppPage: String, CaseIterable, Sendable {
   case convert
   case bookshelf
 }
 
-enum ShelfFilter: String, CaseIterable, Sendable {
+nonisolated enum ShelfFilter: String, CaseIterable, Sendable {
   case all = "All"
   case epub = "EPUB"
   case pdf = "PDF"
 }
 
-enum ShelfSort: String, CaseIterable {
+nonisolated enum ShelfSort: String, CaseIterable {
   case newest = "Newest"
   case oldest = "Oldest"
   case title = "Title A–Z"
 }
 
-struct BookRecord: Codable, Identifiable, Sendable {
+nonisolated struct BookRecord: Codable, Identifiable, Sendable {
   let id: UUID
   let title: String
   let author: String?
@@ -35,13 +35,27 @@ struct BookRecord: Codable, Identifiable, Sendable {
   let format: OutputFormat
   let coverPath: String?
   let completedAt: Date
-  var edited: Bool? = nil
+  let edited: Bool?
+
+  init(
+    id: UUID, title: String, author: String?, filePath: String, format: OutputFormat,
+    coverPath: String?, completedAt: Date, edited: Bool? = nil
+  ) {
+    self.id = id
+    self.title = title
+    self.author = author
+    self.filePath = filePath
+    self.format = format
+    self.coverPath = coverPath
+    self.completedAt = completedAt
+    self.edited = edited
+  }
 
   var fileURL: URL { URL(fileURLWithPath: filePath) }
   var coverURL: URL? { coverPath.map(URL.init(fileURLWithPath:)) }
 }
 
-struct ConversionResult: Sendable {
+nonisolated struct ConversionResult: Sendable {
   let fileURL: URL
   let title: String
   let author: String
@@ -49,7 +63,7 @@ struct ConversionResult: Sendable {
   let coverData: Data?
 }
 
-struct ErrorPresentation: Identifiable {
+nonisolated struct ErrorPresentation: Identifiable, Equatable {
   let id = UUID()
   let title: String
   let summary: String
@@ -80,22 +94,27 @@ struct ErrorPresentation: Identifiable {
   }
 }
 
-enum QueueItemStatus: Equatable, Sendable {
+nonisolated enum QueueItemState: Equatable, Sendable {
   case waiting
-  case active
-  case done
-  case failed
+  case active(progress: Double, message: String)
+  case done(resultURL: URL)
+  case failed(ErrorPresentation)
   case cancelled
 }
 
-struct ConversionItem: Identifiable, Sendable {
+nonisolated struct ConversionItem: Identifiable, Equatable, Sendable {
   let id: UUID
   let fileURL: URL
-  var status: QueueItemStatus = .waiting
-  var progress = 0.0
-  var message = ""
-  var resultURL: URL?
-  var error: ErrorPresentation?
+  var state: QueueItemState = .waiting
+
+  var isWaiting: Bool { state == .waiting }
+  var isActive: Bool { if case .active = state { true } else { false } }
+  var isDone: Bool { if case .done = state { true } else { false } }
+  var isFailed: Bool { if case .failed = state { true } else { false } }
+  var progress: Double { if case .active(let progress, _) = state { progress } else { 0 } }
+  var message: String { if case .active(_, let message) = state { message } else { "" } }
+  var resultURL: URL? { if case .done(let url) = state { url } else { nil } }
+  var failure: ErrorPresentation? { if case .failed(let error) = state { error } else { nil } }
 }
 
 typealias ConversionOperation =
@@ -116,19 +135,19 @@ final class ConversionModel {
   var missingBookIDs: Set<UUID> = []
   var errorPresentation: ErrorPresentation?
 
-  var waitingCount: Int { queue.filter { $0.status == .waiting }.count }
-  var succeededCount: Int { queue.filter { $0.status == .done }.count }
+  var waitingCount: Int { queue.filter(\.isWaiting).count }
+  var succeededCount: Int { queue.filter(\.isDone).count }
 
   var overallProgress: Double {
     guard batchTotal > 0 else { return 0 }
-    let active = queue.first { $0.status == .active }?.progress ?? 0
+    let active = queue.first(where: \.isActive)?.progress ?? 0
     return min(1, (Double(batchCompleted) + active) / Double(batchTotal))
   }
 
   var batchStatusText: String {
     guard isConverting else { return "" }
     let position = min(batchCompleted + 1, batchTotal)
-    let name = queue.first { $0.status == .active }?.fileURL.lastPathComponent ?? ""
+    let name = queue.first(where: \.isActive)?.fileURL.lastPathComponent ?? ""
     return batchTotal > 1 ? "Converting \(position) of \(batchTotal) · \(name)" : name
   }
 
@@ -307,12 +326,12 @@ final class ConversionModel {
 
   func removeItem(_ id: UUID) {
     guard !isConverting else { return }
-    queue.removeAll { $0.id == id && $0.status != .active }
+    queue.removeAll { $0.id == id && !$0.isActive }
   }
 
   func clearFinished() {
     guard !isConverting else { return }
-    queue.removeAll { $0.status != .waiting }
+    queue.removeAll { !$0.isWaiting }
   }
 
   func convert() {
@@ -329,45 +348,35 @@ final class ConversionModel {
         isConverting = false
         conversionTask = nil
       }
-      for index in queue.indices where queue[index].status == .waiting {
+      for index in queue.indices where queue[index].isWaiting {
         if Task.isCancelled { break }
         let id = queue[index].id
         let acsm = queue[index].fileURL
-        queue[index].status = .active
-        queue[index].message = "Preparing…"
+        queue[index].state = .active(progress: 0, message: "Preparing…")
         do {
           let result = try await convertOperation(acsm, outputDirectory) { [weak self] update in
             Task { @MainActor in
               guard let self, let task = self.conversionTask, !task.isCancelled else { return }
-              guard let active = self.queue.firstIndex(where: { $0.status == .active }) else {
-                return
-              }
-              self.queue[active].progress = update.progress
-              self.queue[active].message = update.message
+              guard let active = self.queue.firstIndex(where: \.isActive) else { return }
+              self.queue[active].state = .active(
+                progress: update.progress, message: update.message)
             }
           }
           batchCompleted += 1
           if let current = queue.firstIndex(where: { $0.id == id }) {
-            queue[current].status = .done
-            queue[current].progress = 1
-            queue[current].message = "Done"
-            queue[current].resultURL = result.fileURL
+            queue[current].state = .done(resultURL: result.fileURL)
           }
           addBook(result)
         } catch is CancellationError {
           batchCompleted += 1
           if let current = queue.firstIndex(where: { $0.id == id }) {
-            queue[current].status = .cancelled
-            queue[current].message = "Canceled"
+            queue[current].state = .cancelled
           }
           break
         } catch {
           batchCompleted += 1
-          let presentation = ErrorPresentation.from(error)
           if let current = queue.firstIndex(where: { $0.id == id }) {
-            queue[current].status = .failed
-            queue[current].message = presentation.summary
-            queue[current].error = presentation
+            queue[current].state = .failed(ErrorPresentation.from(error))
           }
         }
       }
@@ -376,8 +385,8 @@ final class ConversionModel {
 
   func cancel() {
     guard isConverting, conversionTask != nil else { return }
-    if let active = queue.firstIndex(where: { $0.status == .active }) {
-      queue[active].message = "Canceling…"
+    if let active = queue.firstIndex(where: \.isActive) {
+      queue[active].state = .active(progress: queue[active].progress, message: "Canceling…")
     }
     conversionTask?.cancel()
   }

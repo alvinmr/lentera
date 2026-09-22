@@ -177,7 +177,7 @@ struct ContentView: View {
   }
 
   private func revealResults() {
-    let urls = model.queue.compactMap { $0.status == .done ? $0.resultURL : nil }
+    let urls = model.queue.compactMap(\.resultURL)
     guard !urls.isEmpty else { return }
     NSWorkspace.shared.activateFileViewerSelecting(urls)
   }
@@ -276,15 +276,15 @@ private struct QueueRow: View {
           .help(item.fileURL.path)
         Text(statusText)
           .font(.caption)
-          .foregroundStyle(item.status == .failed ? Color.red : Color.secondary)
+          .foregroundStyle(item.isFailed ? Color.red : Color.secondary)
           .lineLimit(2)
       }
       Spacer(minLength: 8)
-      if item.status == .failed, item.error != nil {
-        Button("Details") { model.errorPresentation = item.error }
+      if let failure = item.failure {
+        Button("Details") { model.errorPresentation = failure }
           .buttonStyle(.borderless)
       }
-      if item.status == .done, let url = item.resultURL {
+      if let url = item.resultURL {
         Button {
           NSWorkspace.shared.activateFileViewerSelecting([url])
         } label: {
@@ -298,16 +298,16 @@ private struct QueueRow: View {
     .padding(.horizontal, 14).padding(.vertical, 10)
     .contentShape(Rectangle())
     .contextMenu {
-      if item.status == .done, let url = item.resultURL {
+      if let url = item.resultURL {
         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
       }
       Button("Remove from Queue") { model.removeItem(item.id) }
-        .disabled(model.isConverting || item.status == .active)
+        .disabled(model.isConverting || item.isActive)
     }
   }
 
   @ViewBuilder private var icon: some View {
-    switch item.status {
+    switch item.state {
     case .waiting:
       Image(systemName: "circle.dashed").foregroundStyle(.secondary)
     case .active:
@@ -322,15 +322,15 @@ private struct QueueRow: View {
   }
 
   private var statusText: String {
-    switch item.status {
+    switch item.state {
     case .waiting:
       return "Waiting"
-    case .active:
-      return item.message.isEmpty ? "Processing…" : "\(item.message) · \(Int(item.progress * 100))%"
+    case .active(let progress, let message):
+      return message.isEmpty ? "Processing…" : "\(message) · \(Int(progress * 100))%"
     case .done:
       return "Done"
-    case .failed:
-      return item.error?.summary ?? "Failed"
+    case .failed(let error):
+      return error.summary
     case .cancelled:
       return "Canceled"
     }
