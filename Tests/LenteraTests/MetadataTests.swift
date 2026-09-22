@@ -36,7 +36,7 @@ func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) asyn
   try zip.run()
   zip.waitUntilExit()
   try #require(zip.terminationStatus == 0)
-  let metadata = BookMetadata.read(from: directory.appendingPathComponent("fixture.epub"), fallbackTitle: "Fallback")
+  let metadata = await BookMetadata.read(from: directory.appendingPathComponent("fixture.epub"), fallbackTitle: "Fallback")
   #expect(metadata.title == "Light & Life — <Book>")
   #expect(metadata.author == "Jane 'Doe'")
   #expect(metadata.coverData == cover)
@@ -55,8 +55,8 @@ func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) asyn
   #expect(try Data(contentsOf: repaired) == cover)
 }
 
-@Test func missingEPUBFallsBackWithoutCrashing() {
-  let metadata = BookMetadata.read(from: URL(fileURLWithPath: "/nonexistent/fixture.epub"), fallbackTitle: "Fallback")
+@Test func missingEPUBFallsBackWithoutCrashing() async {
+  let metadata = await BookMetadata.read(from: URL(fileURLWithPath: "/nonexistent/fixture.epub"), fallbackTitle: "Fallback")
   #expect(metadata.title == "Fallback")
   #expect(metadata.coverData == nil)
 }

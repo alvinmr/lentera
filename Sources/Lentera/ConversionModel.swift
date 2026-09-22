@@ -179,9 +179,7 @@ final class ConversionModel {
     for book in books where book.format == .epub && book.edited != true {
       let hasCover = book.coverURL.flatMap { NSImage(contentsOf: $0) } != nil
       guard book.author == nil || !hasCover else { continue }
-      let metadata = await Task.detached(priority: .utility) {
-        BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
-      }.value
+      let metadata = await BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
       guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
       self.books[index] = BookRecord(
         id: book.id, title: metadata.title, author: book.author ?? metadata.author,

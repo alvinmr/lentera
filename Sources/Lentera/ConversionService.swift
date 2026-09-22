@@ -30,26 +30,24 @@ enum ConversionError: LocalizedError {
   }
 }
 
-struct ConversionService {
-  private let fileManager = FileManager.default
-
-  func convert(
+struct ConversionService: Sendable {
+  @concurrent func convert(
     acsm: URL,
     destination: URL,
     progress: @escaping @Sendable (ProgressUpdate) -> Void
   ) async throws -> ConversionResult {
-    guard acsm.isFileURL, fileManager.isReadableFile(atPath: acsm.path) else {
+    guard acsm.isFileURL, FileManager.default.isReadableFile(atPath: acsm.path) else {
       throw ConversionError.invalidInput
     }
 
     let tools = try ToolLocator.resolve()
-    let work = fileManager.temporaryDirectory.appendingPathComponent(
+    let work = FileManager.default.temporaryDirectory.appendingPathComponent(
       UUID().uuidString, isDirectory: true)
-    try fileManager.createDirectory(at: work, withIntermediateDirectories: true)
-    defer { try? fileManager.removeItem(at: work) }
+    try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: work) }
 
     let adept = try persistentAdeptDirectory()
-    if !fileManager.fileExists(atPath: adept.appendingPathComponent("activation.xml").path) {
+    if !FileManager.default.fileExists(atPath: adept.appendingPathComponent("activation.xml").path) {
       progress(.init(progress: 0.12, message: "Activating Adobe device…"))
       _ = try await run(
         tools.activate, ["--anonymous", "--random-serial", "--output-dir", adept.path],
@@ -79,17 +77,17 @@ struct ConversionService {
       currentDirectory: work
     )
 
-    let metadata = BookMetadata.read(from: decrypted, fallbackTitle: encrypted.deletingPathExtension().lastPathComponent)
+    let metadata = await BookMetadata.read(from: decrypted, fallbackTitle: encrypted.deletingPathExtension().lastPathComponent)
 
     try Task.checkCancellation()
     progress(.init(progress: 0.96, message: "Saving…"))
-    try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: true)
     let finalURL = uniqueDestination(
       directory: destination,
       baseName: safeBaseName(metadata.title),
       extension: format.fileExtension
     )
-    try fileManager.copyItem(at: decrypted, to: finalURL)
+    try FileManager.default.copyItem(at: decrypted, to: finalURL)
     progress(.init(progress: 1, message: "Done"))
     return ConversionResult(
       fileURL: finalURL,
@@ -101,16 +99,16 @@ struct ConversionService {
   }
 
   private func persistentAdeptDirectory() throws -> URL {
-    let support = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("Lentera", isDirectory: true)
-    try fileManager.createDirectory(at: support, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
     let adept = support.appendingPathComponent("adept", isDirectory: true)
-    try fileManager.createDirectory(at: adept, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: adept, withIntermediateDirectories: true)
     return adept
   }
 
   private func downloadedBook(in directory: URL, commandOutput: String) throws -> URL {
-    let files = try fileManager.contentsOfDirectory(
+    let files = try FileManager.default.contentsOfDirectory(
       at: directory,
       includingPropertiesForKeys: [.isRegularFileKey],
       options: [.skipsHiddenFiles]
@@ -122,31 +120,29 @@ struct ConversionService {
     throw ConversionError.commandFailed("acsmdownloader", commandOutput)
   }
 
-  func run(_ executable: URL, _ arguments: [String], currentDirectory: URL) async throws
+  @concurrent func run(_ executable: URL, _ arguments: [String], currentDirectory: URL) async throws
     -> String
   {
     try Task.checkCancellation()
     let handle = RunningProcess()
     do {
       let output = try await withTaskCancellationHandler {
-        try await Task.detached(priority: .userInitiated) {
-          let process = Process()
-          let pipe = Pipe()
-          process.executableURL = executable
-          process.arguments = arguments
-          process.currentDirectoryURL = currentDirectory
-          process.standardOutput = pipe
-          process.standardError = pipe
-          defer { handle.clear() }
-          try handle.start(process)
-          let data = pipe.fileHandleForReading.readDataToEndOfFile()
-          process.waitUntilExit()
-          let output = String(decoding: data, as: UTF8.self)
-          guard process.terminationStatus == 0 else {
-            throw ConversionError.commandFailed(executable.lastPathComponent, output)
-          }
-          return output
-        }.value
+        let process = Process()
+        let pipe = Pipe()
+        process.executableURL = executable
+        process.arguments = arguments
+        process.currentDirectoryURL = currentDirectory
+        process.standardOutput = pipe
+        process.standardError = pipe
+        defer { handle.clear() }
+        try handle.start(process)
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        let output = String(decoding: data, as: UTF8.self)
+        guard process.terminationStatus == 0 else {
+          throw ConversionError.commandFailed(executable.lastPathComponent, output)
+        }
+        return output
       } onCancel: {
         handle.terminate()
       }
@@ -168,7 +164,7 @@ struct ConversionService {
   private func uniqueDestination(directory: URL, baseName: String, extension ext: String) -> URL {
     var candidate = directory.appendingPathComponent(baseName).appendingPathExtension(ext)
     var suffix = 2
-    while fileManager.fileExists(atPath: candidate.path) {
+    while FileManager.default.fileExists(atPath: candidate.path) {
       candidate = directory.appendingPathComponent("\(baseName) \(suffix)").appendingPathExtension(
         ext)
       suffix += 1
@@ -240,7 +236,7 @@ struct BookMetadata: Sendable {
   let author: String
   let coverData: Data?
 
-  static func read(from file: URL, fallbackTitle: String) -> BookMetadata {
+  @concurrent static func read(from file: URL, fallbackTitle: String) async -> BookMetadata {
     guard file.pathExtension.lowercased() == "epub" else {
       return BookMetadata(title: fallbackTitle, author: "Author unavailable", coverData: nil)
     }
