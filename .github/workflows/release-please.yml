@@ -4,6 +4,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing release tag to rebuild and upload (for example v0.2.0)"
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -32,12 +37,22 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.release-please.outputs.tag_name || github.sha }}
+          ref: ${{ inputs.release_tag || needs.release-please.outputs.tag_name || github.sha }}
           fetch-depth: 0
 
       - name: Read version
         id: version
         run: echo "version=$(jq -r .version package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Validate recovery release
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG_NAME: ${{ inputs.release_tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          test "$TAG_NAME" = "v${VERSION}"
+          gh release view "$TAG_NAME"
 
       - name: Install native dependencies
         run: brew install curl libzip openssl@3 pugixml
@@ -69,9 +84,9 @@ jobs:
           path: build/Lentera-v*-macOS.zip
 
       - name: Upload release asset
-        if: needs.release-please.outputs.release_created == 'true'
+        if: needs.release-please.outputs.release_created == 'true' || inputs.release_tag != ''
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
-          TAG_NAME: ${{ needs.release-please.outputs.tag_name }}
+          TAG_NAME: ${{ inputs.release_tag || needs.release-please.outputs.tag_name }}
         run: gh release upload "$TAG_NAME" "build/Lentera-v${VERSION}-macOS.zip" --clobber
