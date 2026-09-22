@@ -124,22 +124,27 @@ final class ConversionModel {
     {
       self.books = saved
       Task { [weak self] in
-        for book in saved where book.format == .epub && (book.author == nil || book.coverPath == nil) {
-          let metadata = await Task.detached(priority: .utility) {
-            BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
-          }.value
-          guard let self else { return }
-          guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
-          self.books[index] = BookRecord(
-            id: book.id, title: metadata.title, author: book.author ?? metadata.author,
-            filePath: book.filePath, format: book.format,
-            coverPath: book.coverPath ?? Self.saveCover(metadata.coverData, id: book.id),
-            completedAt: book.completedAt)
-        }
+        await self?.refreshBookMetadata()
         if let self, let refreshed = try? JSONEncoder().encode(self.books) {
           UserDefaults.standard.set(refreshed, forKey: "bookshelf")
         }
       }
+    }
+  }
+
+  func refreshBookMetadata() async {
+    for book in books where book.format == .epub {
+      let hasCover = book.coverURL.flatMap { NSImage(contentsOf: $0) } != nil
+      guard book.author == nil || !hasCover else { continue }
+      let metadata = await Task.detached(priority: .utility) {
+        BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
+      }.value
+      guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
+      self.books[index] = BookRecord(
+        id: book.id, title: metadata.title, author: book.author ?? metadata.author,
+        filePath: book.filePath, format: book.format,
+        coverPath: hasCover ? book.coverPath : Self.saveCover(metadata.coverData, id: book.id),
+        completedAt: book.completedAt)
     }
   }
 
@@ -262,7 +267,7 @@ final class ConversionModel {
   }
 
   private static func saveCover(_ data: Data?, id: UUID) -> String? {
-    guard let data else { return nil }
+    guard let data, NSImage(data: data) != nil else { return nil }
     let directory = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
       .appendingPathComponent("Lentera/covers", isDirectory: true)
     do {

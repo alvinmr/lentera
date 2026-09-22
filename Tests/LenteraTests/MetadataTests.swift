@@ -1,9 +1,10 @@
-import Foundation
+import AppKit
 import Testing
 @testable import Lentera
 
 @Test(arguments: [false, true])
-func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) throws {
+@MainActor
+func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) async throws {
   let fm = FileManager.default
   let directory = fm.temporaryDirectory.appendingPathComponent(UUID().uuidString)
   defer { try? fm.removeItem(at: directory) }
@@ -25,7 +26,8 @@ func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) thro
   """
   try Data(container.utf8).write(to: directory.appendingPathComponent("META-INF/container.xml"))
   try Data(package.utf8).write(to: directory.appendingPathComponent("OPS/book.opf"))
-  let cover = Data([137, 80, 78, 71])
+  let cover = try #require(Data(base64Encoded:
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE1sAAAAASUVORK5CYII="))
   try cover.write(to: directory.appendingPathComponent("Images/art work.png"))
   let zip = Process()
   zip.executableURL = URL(fileURLWithPath: "/usr/bin/zip")
@@ -38,6 +40,19 @@ func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) thro
   #expect(metadata.title == "Light & Life — <Book>")
   #expect(metadata.author == "Jane 'Doe'")
   #expect(metadata.coverData == cover)
+
+  // Older versions cached cover.xhtml as a JPG and never retried that path.
+  let cached = directory.appendingPathComponent("cached.jpg")
+  try Data("<html>cover</html>".utf8).write(to: cached)
+  let book = BookRecord(id: UUID(), title: metadata.title, author: metadata.author,
+    filePath: directory.appendingPathComponent("fixture.epub").path,
+    format: .epub, coverPath: cached.path, completedAt: Date())
+  let model = ConversionModel(books: [book])
+  await model.refreshBookMetadata()
+  let repaired = try #require(model.books.first?.coverURL)
+  defer { if repaired != cached { try? fm.removeItem(at: repaired) } }
+  #expect(NSImage(contentsOf: repaired) != nil)
+  #expect(try Data(contentsOf: repaired) == cover)
 }
 
 @Test func missingEPUBFallsBackWithoutCrashing() {
