@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/alvinmr/lentera/compare/v1.0.0...v1.0.1) (2026-09-22)
+
+
+### Bug Fixes
+
+* load the OpenSSL legacy provider from the app bundle ([816e74d](https://github.com/alvinmr/lentera/commit/816e74d6642114e6dd400029b6d08d326ebe0816))
+
 ## [1.0.0](https://github.com/alvinmr/lentera/compare/v0.5.0...v1.0.0) (2026-09-22)
 
 
