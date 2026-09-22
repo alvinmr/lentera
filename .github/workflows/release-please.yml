@@ -63,7 +63,7 @@ jobs:
         run: command -v cmake >/dev/null || brew install cmake
 
       - name: Cache engine dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: .engine-deps
           key: engine-deps-${{ runner.os }}-${{ hashFiles('Scripts/build-engine-deps.sh') }}
