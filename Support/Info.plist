@@ -37,6 +37,8 @@
 	<string>14.0</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSHumanReadableCopyright</key>
+	<string>Copyright © 2026 alvinmr. Bundles libgourou, licensed under LGPL-3.0.</string>
 	<key>SUFeedURL</key>
 	<string>https://github.com/alvinmr/lentera/releases/latest/download/appcast.xml</string>
 	<key>SUPublicEDKey</key>
