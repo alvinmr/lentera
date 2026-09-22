@@ -15,6 +15,8 @@ VERSION="${LENTERA_VERSION:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVe
 BUILD="${LENTERA_BUILD:-$(/usr/libexec/PlistBuddy -c 'Print :CFBundleVersion' "$ROOT/Support/Info.plist")}"
 /usr/libexec/PlistBuddy -c "Set :CFBundleVersion $BUILD" "$APP/Contents/Info.plist"
 cp "$ROOT/Support/Lentera.icns" "$APP/Contents/Resources/Lentera.icns"
+cp "$ROOT/Support/ThirdPartyNotices.txt" "$APP/Contents/Resources/ThirdPartyNotices.txt"
+cp "$ROOT/Vendor/libgourou/LICENSE" "$APP/Contents/Resources/libgourou-LICENSE.txt"
 rm -rf "$APP/Contents/Resources/Lentera_Lentera.bundle"
 cp -R "$ROOT/.build/release/Lentera_Lentera.bundle" "$APP/Contents/Resources/"
 

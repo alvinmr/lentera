@@ -1,0 +1,25 @@
+Lentera bundles the following third-party components.
+
+libgourou
+  License: LGPL-3.0 (see libgourou-LICENSE.txt)
+  Source: Vendor/libgourou in this repository
+
+OpenSSL 3.6.4
+  License: Apache License 2.0
+  Source: https://www.openssl.org/source/
+
+curl 8.22.0
+  License: curl license (MIT-like)
+  Source: https://curl.se/download/
+
+libzip 1.11.4
+  License: BSD 3-Clause
+  Source: https://libzip.org/download/
+
+pugixml 1.16
+  License: MIT
+  Source: https://github.com/zeux/pugixml
+
+Sparkle 2.10.0
+  License: MIT
+  Source: https://github.com/sparkle-project/Sparkle
