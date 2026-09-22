@@ -35,6 +35,7 @@ struct BookRecord: Codable, Identifiable, Sendable {
   let format: OutputFormat
   let coverPath: String?
   let completedAt: Date
+  var edited: Bool? = nil
 
   var fileURL: URL { URL(fileURLWithPath: filePath) }
   var coverURL: URL? { coverPath.map(URL.init(fileURLWithPath:)) }
@@ -112,6 +113,7 @@ final class ConversionModel {
   var isDropTargeted = false
   var isConverting = false
   var books: [BookRecord] = []
+  var missingBookIDs: Set<UUID> = []
   var errorPresentation: ErrorPresentation?
 
   var waitingCount: Int { queue.filter { $0.status == .waiting }.count }
@@ -168,15 +170,13 @@ final class ConversionModel {
       self.books = saved
       Task { [weak self] in
         await self?.refreshBookMetadata()
-        if let self, let refreshed = try? JSONEncoder().encode(self.books) {
-          UserDefaults.standard.set(refreshed, forKey: "bookshelf")
-        }
+        self?.persistBooks()
       }
     }
   }
 
   func refreshBookMetadata() async {
-    for book in books where book.format == .epub {
+    for book in books where book.format == .epub && book.edited != true {
       let hasCover = book.coverURL.flatMap { NSImage(contentsOf: $0) } != nil
       guard book.author == nil || !hasCover else { continue }
       let metadata = await Task.detached(priority: .utility) {
@@ -189,6 +189,64 @@ final class ConversionModel {
         coverPath: hasCover ? book.coverPath : Self.saveCover(metadata.coverData, id: book.id),
         completedAt: book.completedAt)
     }
+    refreshMissingFiles()
+  }
+
+  func refreshMissingFiles() {
+    missingBookIDs = Set(
+      books.filter { !FileManager.default.fileExists(atPath: $0.filePath) }.map(\.id))
+  }
+
+  func openBook(_ book: BookRecord) {
+    guard !missingBookIDs.contains(book.id) else { return }
+    NSWorkspace.shared.open(book.fileURL)
+  }
+
+  func removeBook(_ id: UUID) {
+    guard let index = books.firstIndex(where: { $0.id == id }) else { return }
+    Self.deleteCover(books[index].coverPath)
+    books.remove(at: index)
+    missingBookIDs.remove(id)
+    persistBooks()
+  }
+
+  func removeMissingBooks() {
+    for book in books where missingBookIDs.contains(book.id) {
+      Self.deleteCover(book.coverPath)
+    }
+    books.removeAll { missingBookIDs.contains($0.id) }
+    missingBookIDs.removeAll()
+    persistBooks()
+  }
+
+  func trashBook(_ id: UUID) {
+    guard let book = books.first(where: { $0.id == id }) else { return }
+    if FileManager.default.fileExists(atPath: book.filePath) {
+      do {
+        try FileManager.default.trashItem(at: book.fileURL, resultingItemURL: nil)
+      } catch {
+        errorPresentation = ErrorPresentation(
+          title: "Could not move book to Trash",
+          summary: error.localizedDescription,
+          detail: String(describing: error)
+        )
+        return
+      }
+    }
+    removeBook(id)
+  }
+
+  func updateBook(_ id: UUID, title: String, author: String?) {
+    let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !cleanTitle.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
+    let cleanAuthor = author?.trimmingCharacters(in: .whitespacesAndNewlines)
+    let book = books[index]
+    books[index] = BookRecord(
+      id: book.id, title: cleanTitle,
+      author: cleanAuthor?.isEmpty == true ? nil : cleanAuthor,
+      filePath: book.filePath, format: book.format, coverPath: book.coverPath,
+      completedAt: book.completedAt, edited: true)
+    persistBooks()
   }
 
   func chooseFiles() {
@@ -339,9 +397,18 @@ final class ConversionModel {
     )
     books.removeAll { $0.filePath == record.filePath }
     books.insert(record, at: 0)
+    persistBooks()
+  }
+
+  private func persistBooks() {
     if let data = try? JSONEncoder().encode(books) {
       UserDefaults.standard.set(data, forKey: "bookshelf")
     }
+  }
+
+  private static func deleteCover(_ path: String?) {
+    guard let path else { return }
+    try? FileManager.default.removeItem(atPath: path)
   }
 
   private static func queueKey(_ url: URL) -> String {

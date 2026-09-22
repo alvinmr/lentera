@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 struct ContentView: View {
   @Bindable var model: ConversionModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var editingBook: BookRecord?
 
   var body: some View {
     NavigationSplitView {
@@ -33,6 +34,11 @@ struct ContentView: View {
     }
     .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted) { model.acceptDrop($0) }
     .sheet(item: $model.errorPresentation) { ErrorDetailView(error: $0) }
+    .sheet(item: $editingBook) { book in
+      BookDetailsEditor(book: book) { title, author in
+        model.updateBook(book.id, title: title, author: author)
+      }
+    }
   }
 
   private var conversionPage: some View {
@@ -203,6 +209,7 @@ struct ContentView: View {
         .help("Sort: \(model.shelfSort.rawValue)")
       }
       .padding(24)
+      if !model.missingBookIDs.isEmpty { missingFilesNotice }
       if visibleBooks.isEmpty {
         ContentUnavailableView {
           Label(model.books.isEmpty ? "No Books Yet" : "No Matching Books", systemImage: "books.vertical")
@@ -222,7 +229,14 @@ struct ContentView: View {
       } else {
         ScrollView {
           LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 28)], alignment: .leading, spacing: 28) {
-            ForEach(visibleBooks) { BookCard(book: $0) }
+            ForEach(visibleBooks) { book in
+              BookCard(
+                book: book,
+                isMissing: model.missingBookIDs.contains(book.id),
+                model: model,
+                onEdit: { editingBook = book }
+              )
+            }
           }
           .padding(.horizontal, 24).padding(.bottom, 24)
         }
@@ -230,6 +244,22 @@ struct ContentView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Search title or author")
+    .task { model.refreshMissingFiles() }
+  }
+
+  private var missingFilesNotice: some View {
+    HStack(spacing: 10) {
+      Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+      Text(model.missingBookIDs.count == 1 ? "1 book file is missing." : "\(model.missingBookIDs.count) book files are missing.")
+      Spacer()
+      Button("Remove Missing", action: model.removeMissingBooks)
+    }
+    .padding(12)
+    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
+    .overlay {
+      RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor))
+    }
+    .padding(.horizontal, 24).padding(.bottom, 16)
   }
 }
 
@@ -262,6 +292,7 @@ private struct QueueRow: View {
         }
         .buttonStyle(.borderless)
         .help("Reveal in Finder")
+        .accessibilityLabel("Reveal in Finder")
       }
     }
     .padding(.horizontal, 14).padding(.vertical, 10)
@@ -308,10 +339,13 @@ private struct QueueRow: View {
 
 private struct BookCard: View {
   let book: BookRecord
+  let isMissing: Bool
+  let model: ConversionModel
+  let onEdit: () -> Void
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
-    Button { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) } label: {
+    Button { model.openBook(book) } label: {
       VStack(alignment: .leading, spacing: 8) {
         ZStack {
           RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor))
@@ -323,20 +357,77 @@ private struct BookCard: View {
         }
         .frame(height: 220)
         .clipShape(RoundedRectangle(cornerRadius: 6))
-      Text(book.title).font(.headline).lineLimit(2).help(book.title)
-      Text(book.author ?? "Author unavailable").font(.callout).foregroundStyle(.secondary).lineLimit(1)
-      Text(book.format.rawValue).font(.caption).foregroundStyle(.secondary)
+        .opacity(isMissing ? 0.55 : 1)
+        .overlay(alignment: .topTrailing) {
+          if isMissing {
+            Image(systemName: "exclamationmark.triangle.fill")
+              .font(.system(size: 15))
+              .foregroundStyle(.orange)
+              .padding(6)
+              .background(.regularMaterial, in: Circle())
+              .padding(6)
+          }
+        }
+        Text(book.title).font(.headline).lineLimit(2).help(book.title)
+        Text(book.author ?? "Author unavailable").font(.callout).foregroundStyle(.secondary).lineLimit(1)
+        Text(book.format.rawValue).font(.caption).foregroundStyle(.secondary)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .multilineTextAlignment(.leading)
       .contentShape(Rectangle())
     }
     .buttonStyle(PressFeedbackButtonStyle(reduceMotion: reduceMotion))
-    .help("Reveal \(book.title) in Finder")
-    .accessibilityLabel("Reveal \(book.title) in Finder")
+    .help(isMissing ? "\(book.title) — file not found" : "Open \(book.title)")
+    .accessibilityLabel(isMissing ? "\(book.title), file not found" : "Open \(book.title)")
     .contextMenu {
+      Button("Open") { model.openBook(book) }.disabled(isMissing)
       Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) }
+      Button("Edit Details…", action: onEdit)
+      Divider()
+      Button("Remove from Shelf") { model.removeBook(book.id) }
+      Button("Move to Trash") { model.trashBook(book.id) }
     }
+  }
+}
+
+private struct BookDetailsEditor: View {
+  let book: BookRecord
+  let onSave: (String, String?) -> Void
+  @Environment(\.dismiss) private var dismiss
+  @State private var title: String
+  @State private var author: String
+
+  init(book: BookRecord, onSave: @escaping (String, String?) -> Void) {
+    self.book = book
+    self.onSave = onSave
+    _title = State(initialValue: book.title)
+    _author = State(initialValue: book.author ?? "")
+  }
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 18) {
+      Text("Edit Details").font(.title2.weight(.semibold))
+      VStack(alignment: .leading, spacing: 12) {
+        TextField("Title", text: $title)
+        TextField("Author", text: $author)
+      }
+      .textFieldStyle(.roundedBorder)
+      Text("Changes apply to your bookshelf only. The book file is not modified.")
+        .font(.caption).foregroundStyle(.secondary)
+      HStack {
+        Spacer()
+        Button("Cancel", role: .cancel) { dismiss() }
+          .keyboardShortcut(.cancelAction)
+        Button("Save") {
+          onSave(title, author.isEmpty ? nil : author)
+          dismiss()
+        }
+        .buttonStyle(.borderedProminent)
+        .keyboardShortcut(.defaultAction)
+        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      }
+    }
+    .padding(24).frame(width: 420)
   }
 }
 
