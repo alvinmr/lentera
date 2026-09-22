@@ -21,6 +21,14 @@ struct LenteraApp: App {
     .defaultSize(width: 920, height: 660)
     .windowToolbarStyle(.unified)
     .commands {
+      CommandGroup(replacing: .help) {
+        Link(
+          "Lentera Help",
+          destination: URL(string: "https://github.com/alvinmr/lentera#readme")!)
+        Link(
+          "Release Notes",
+          destination: URL(string: "https://github.com/alvinmr/lentera/releases")!)
+      }
       CommandGroup(after: .appInfo) {
         CheckForUpdatesView(updater: updaterController.updater)
       }
