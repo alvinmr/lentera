@@ -281,6 +281,17 @@ private struct QueueRow: View {
         Button("Details") { model.errorPresentation = failure }
           .buttonStyle(.borderless)
       }
+      if item.canRetry {
+        Button {
+          model.retryItem(item.id)
+        } label: {
+          Image(systemName: "arrow.clockwise")
+        }
+        .buttonStyle(.borderless)
+        .help("Retry")
+        .accessibilityLabel("Retry")
+        .disabled(model.isConverting)
+      }
       if let url = item.resultURL {
         Button {
           NSWorkspace.shared.activateFileViewerSelecting([url])
@@ -297,6 +308,10 @@ private struct QueueRow: View {
     .contextMenu {
       if let url = item.resultURL {
         Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+      }
+      if item.canRetry {
+        Button("Retry") { model.retryItem(item.id) }
+          .disabled(model.isConverting)
       }
       Button("Remove from Queue") { model.removeItem(item.id) }
         .disabled(model.isConverting || item.isActive)

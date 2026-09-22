@@ -111,6 +111,7 @@ nonisolated struct ConversionItem: Identifiable, Equatable, Sendable {
   var isActive: Bool { if case .active = state { true } else { false } }
   var isDone: Bool { if case .done = state { true } else { false } }
   var isFailed: Bool { if case .failed = state { true } else { false } }
+  var canRetry: Bool { if case .failed = state { true } else { state == .cancelled } }
   var progress: Double { if case .active(let progress, _) = state { progress } else { 0 } }
   var message: String { if case .active(_, let message) = state { message } else { "" } }
   var resultURL: URL? { if case .done(let url) = state { url } else { nil } }
@@ -380,6 +381,14 @@ final class ConversionModel {
           }
         }
       }
+    }
+  }
+
+  func retryItem(_ id: UUID) {
+    guard !isConverting, let index = queue.firstIndex(where: { $0.id == id }) else { return }
+    switch queue[index].state {
+    case .failed, .cancelled: queue[index].state = .waiting
+    case .waiting, .active, .done: return
     }
   }
 

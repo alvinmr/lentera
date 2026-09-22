@@ -85,3 +85,33 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   model.removeItem(model.queue[1].id)
   #expect(model.queue.map(\.fileURL.lastPathComponent) == ["one.acsm"])
 }
+
+@MainActor @Test func retryMovesFailedItemBackToWaiting() async throws {
+  let model = ConversionModel(
+    books: [], convert: { _, _, _ in throw ConversionError.invalidInput })
+  model.addFiles([acsm("one.acsm")])
+  model.convert()
+  try await waitForBatch(model)
+  #expect(model.queue[0].isFailed)
+  model.retryItem(model.queue[0].id)
+  #expect(model.queue[0].isWaiting)
+}
+
+@MainActor @Test func retryIsIgnoredWhileConverting() async throws {
+  let model = ConversionModel(
+    books: [],
+    convert: { _, _, _ in
+      try await Task.sleep(for: .seconds(30))
+      throw ConversionError.invalidInput
+    })
+  model.addFiles([acsm("one.acsm")])
+  model.convert()
+  for _ in 0..<600 where model.queue.first?.isActive != true {
+    try await Task.sleep(for: .milliseconds(10))
+  }
+  model.retryItem(model.queue[0].id)
+  #expect(model.queue[0].isActive)
+  model.cancel()
+  try await waitForBatch(model)
+}
+
