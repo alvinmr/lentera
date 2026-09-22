@@ -1,12 +1,11 @@
 obj
-lib
 *.o
 *.a
 *.so
 *~
-utils/acsmdownloader
-utils/adept_activate
-utils/adept_remove
-utils/adept_loan_mgt
-utils/launcher
+libgourou/utils/acsmdownloader
+libgourou/utils/adept_activate
+libgourou/utils/adept_remove
+libgourou/utils/adept_loan_mgt
+libgourou/utils/launcher
 .adept*
