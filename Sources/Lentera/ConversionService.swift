@@ -39,6 +39,14 @@ nonisolated enum ConversionError: LocalizedError {
 }
 
 nonisolated struct ConversionService: Sendable {
+  private let tools: ToolLocator?
+  private let adeptDirectory: URL?
+
+  init(tools: ToolLocator? = nil, adeptDirectory: URL? = nil) {
+    self.tools = tools
+    self.adeptDirectory = adeptDirectory
+  }
+
   @concurrent func convert(
     acsm: URL,
     destination: URL,
@@ -48,24 +56,35 @@ nonisolated struct ConversionService: Sendable {
       throw ConversionError.invalidInput
     }
 
-    let tools = try ToolLocator.resolve()
+    let resolvedTools: ToolLocator
+    if let tools {
+      resolvedTools = tools
+    } else {
+      resolvedTools = try ToolLocator.resolve()
+    }
     let work = FileManager.default.temporaryDirectory.appendingPathComponent(
       UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: work, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: work) }
 
-    let adept = try persistentAdeptDirectory()
+    let adept: URL
+    if let adeptDirectory {
+      adept = adeptDirectory
+    } else {
+      adept = try persistentAdeptDirectory()
+    }
     if !FileManager.default.fileExists(atPath: adept.appendingPathComponent("activation.xml").path) {
       progress(.init(progress: 0.12, message: "Activating Adobe device…"))
       _ = try await run(
-        tools.activate, ["--anonymous", "--random-serial", "--output-dir", adept.path],
+        resolvedTools.activate,
+        ["--anonymous", "--random-serial", "--output-dir", adept.path],
         currentDirectory: work)
     }
 
     try Task.checkCancellation()
     progress(.init(progress: 0.32, message: "Downloading the book from the provider…"))
     let downloadOutput = try await run(
-      tools.downloader,
+      resolvedTools.downloader,
       ["--adept-directory", adept.path, acsm.path],
       currentDirectory: work
     )
@@ -80,7 +99,7 @@ nonisolated struct ConversionService: Sendable {
     try Task.checkCancellation()
     progress(.init(progress: 0.68, message: "Removing book protection…"))
     _ = try await run(
-      tools.remove,
+      resolvedTools.remove,
       ["--adept-directory", adept.path, "--output-file", decrypted.path, encrypted.path],
       currentDirectory: work
     )
