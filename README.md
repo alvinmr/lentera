@@ -38,13 +38,13 @@ The wizard downloads Sparkle's tools into `.sparkle-tools/` (git-ignored), store
 
 - macOS 14 or later
 - Xcode 26 or later with Swift 6.2+
-- Homebrew dependencies: `curl`, `libzip`, `openssl@3`, and `pugixml`
+- CMake (`brew install cmake`) for the engine dependencies
 - A libgourou source checkout, unless the included vendor checkout is already prepared
 
-Install the native dependencies:
+Install CMake:
 
 ```sh
-brew install curl libzip openssl@3 pugixml
+brew install cmake
 ```
 
 Build the conversion engine and the app:
@@ -54,6 +54,10 @@ Scripts/build-engine.sh /path/to/libgourou
 Scripts/build-app.sh
 open build/Lentera.app
 ```
+
+`build-engine.sh` first builds OpenSSL, curl, libzip, and pugixml from source for a macOS 14
+deployment target (cached in the git-ignored `.engine-deps/`). Building against Homebrew bottles
+instead would make the bundled engine require the build machine's macOS version.
 
 If you are using the prepared `Vendor/libgourou` checkout, omit the engine path:
 
