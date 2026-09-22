@@ -13,9 +13,9 @@ The app is ad-hoc signed and is **not Apple-notarized**. If macOS blocks it, att
 ## Use
 
 1. Open Lentera and choose **Konversi**.
-2. Click **Pilih File…**, or drag an `.acsm` file into the drop area.
+2. Click **Pilih File…**, or drag one or more `.acsm` files into the drop area. Double-clicking an `.acsm` file in Finder opens Lentera and adds it to the queue.
 3. Choose a destination folder if `Downloads` is not suitable.
-4. Click **Konversi**. The provider determines whether the returned file is EPUB or PDF.
+4. Click **Konversi**. Files are converted one at a time; a failed book does not stop the rest of the queue. The provider determines whether each returned file is EPUB or PDF.
 5. Open **Rak Buku** to find completed books. Click a book to reveal its file in Finder.
 
 Lentera needs an ACSM file for a book you are authorized to access. An ACSM file is a license message, not the book itself; the provider and Adobe services still need to fulfill the license during conversion.

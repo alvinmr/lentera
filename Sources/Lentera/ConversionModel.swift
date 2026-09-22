@@ -79,6 +79,27 @@ struct ErrorPresentation: Identifiable {
   }
 }
 
+enum QueueItemStatus: Equatable, Sendable {
+  case waiting
+  case active
+  case done
+  case failed
+  case cancelled
+}
+
+struct ConversionItem: Identifiable, Sendable {
+  let id: UUID
+  let fileURL: URL
+  var status: QueueItemStatus = .waiting
+  var progress = 0.0
+  var message = ""
+  var resultURL: URL?
+  var error: ErrorPresentation?
+}
+
+typealias ConversionOperation =
+  @Sendable (URL, URL, @escaping @Sendable (ProgressUpdate) -> Void) async throws -> ConversionResult
+
 @MainActor
 @Observable
 final class ConversionModel {
@@ -86,14 +107,29 @@ final class ConversionModel {
   var shelfFilter: ShelfFilter = .all
   var shelfSearch = ""
   var shelfSort: ShelfSort = .newest
-  var selectedFile: URL?
+  var queue: [ConversionItem] = []
   var destination: URL?
   var isDropTargeted = false
   var isConverting = false
-  var progress = 0.0
-  var statusText = "Mempersiapkan…"
-  var resultFile: URL?
   var books: [BookRecord] = []
+  var errorPresentation: ErrorPresentation?
+
+  var waitingCount: Int { queue.filter { $0.status == .waiting }.count }
+  var succeededCount: Int { queue.filter { $0.status == .done }.count }
+
+  var overallProgress: Double {
+    guard batchTotal > 0 else { return 0 }
+    let active = queue.first { $0.status == .active }?.progress ?? 0
+    return min(1, (Double(batchCompleted) + active) / Double(batchTotal))
+  }
+
+  var batchStatusText: String {
+    guard isConverting else { return "" }
+    let position = min(batchCompleted + 1, batchTotal)
+    let name = queue.first { $0.status == .active }?.fileURL.lastPathComponent ?? ""
+    return batchTotal > 1 ? "Memproses \(position) dari \(batchTotal) · \(name)" : name
+  }
+
   var visibleBooks: [BookRecord] {
     let query = shelfSearch.trimmingCharacters(in: .whitespacesAndNewlines)
     return books.filter { book in
@@ -110,11 +146,18 @@ final class ConversionModel {
       }
     }
   }
-  var errorPresentation: ErrorPresentation?
 
   private var conversionTask: Task<Void, Never>?
+  private var batchTotal = 0
+  private var batchCompleted = 0
+  private let convertOperation: ConversionOperation
 
-  init(books: [BookRecord]? = nil) {
+  init(books: [BookRecord]? = nil, convert: ConversionOperation? = nil) {
+    self.convertOperation =
+      convert ?? { acsm, destination, progress in
+        try await ConversionService().convert(
+          acsm: acsm, destination: destination, progress: progress)
+      }
     if let books {
       self.books = books
       return
@@ -148,13 +191,14 @@ final class ConversionModel {
     }
   }
 
-  func chooseFile() {
+  func chooseFiles() {
     guard !isConverting else { return }
     let panel = NSOpenPanel()
     panel.allowedContentTypes = [UTType(filenameExtension: "acsm") ?? .data]
-    panel.allowsMultipleSelection = false
+    panel.allowsMultipleSelection = true
     panel.canChooseDirectories = false
-    if panel.runModal() == .OK, let url = panel.url { select(url) }
+    panel.prompt = "Tambah"
+    if panel.runModal() == .OK, !panel.urls.isEmpty { addFiles(panel.urls) }
   }
 
   func chooseDestination() {
@@ -168,101 +212,151 @@ final class ConversionModel {
   }
 
   func acceptDrop(_ providers: [NSItemProvider]) -> Bool {
-    guard !isConverting else { return false }
-    guard
-      let provider = providers.first(where: {
-        $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
-      })
-    else {
-      return false
+    let fileProviders = providers.filter {
+      $0.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
     }
-    provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) {
-      [weak self] item, _ in
-      let url: URL?
-      if let data = item as? Data {
-        url = URL(dataRepresentation: data, relativeTo: nil)
-      } else {
-        url = item as? URL
+    guard !fileProviders.isEmpty else { return false }
+    Task { @MainActor in
+      var urls: [URL] = []
+      for provider in fileProviders {
+        if let url = await Self.fileURL(from: provider) { urls.append(url) }
       }
-      guard let url else { return }
-      Task { @MainActor in self?.select(url) }
+      addFiles(urls)
     }
     return true
   }
 
+  func addFiles(_ urls: [URL]) {
+    var known = Set(queue.map { Self.queueKey($0.fileURL) })
+    var rejected: [URL] = []
+    var added = 0
+    for url in urls {
+      guard url.pathExtension.lowercased() == "acsm" else {
+        rejected.append(url)
+        continue
+      }
+      guard known.insert(Self.queueKey(url)).inserted else { continue }
+      queue.append(ConversionItem(id: UUID(), fileURL: url))
+      added += 1
+    }
+    if added > 0 { page = .convert }
+    if !rejected.isEmpty {
+      errorPresentation = ErrorPresentation(
+        title: rejected.count == 1 ? "File tidak didukung" : "Sebagian file tidak didukung",
+        summary: "Hanya file dengan ekstensi .acsm yang dapat dikonversi.",
+        detail: rejected.map(\.path).joined(separator: "\n")
+      )
+    }
+  }
+
+  func removeItem(_ id: UUID) {
+    guard !isConverting else { return }
+    queue.removeAll { $0.id == id && $0.status != .active }
+  }
+
+  func clearFinished() {
+    guard !isConverting else { return }
+    queue.removeAll { $0.status != .waiting }
+  }
+
   func convert() {
-    guard !isConverting, let selectedFile else { return }
+    guard !isConverting, waitingCount > 0 else { return }
     let outputDirectory =
       destination ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
     isConverting = true
-    resultFile = nil
     errorPresentation = nil
-    progress = 0.05
-    statusText = "Memeriksa mesin konversi…"
+    batchTotal = waitingCount
+    batchCompleted = 0
 
     conversionTask = Task {
       defer {
         isConverting = false
         conversionTask = nil
       }
-      do {
-        let result = try await ConversionService().convert(
-          acsm: selectedFile,
-          destination: outputDirectory
-        ) { [weak self] update in
-          Task { @MainActor in
-            guard let self, let task = self.conversionTask, !task.isCancelled else { return }
-            self.progress = update.progress
-            self.statusText = update.message
+      for index in queue.indices where queue[index].status == .waiting {
+        if Task.isCancelled { break }
+        let id = queue[index].id
+        let acsm = queue[index].fileURL
+        queue[index].status = .active
+        queue[index].message = "Menyiapkan…"
+        do {
+          let result = try await convertOperation(acsm, outputDirectory) { [weak self] update in
+            Task { @MainActor in
+              guard let self, let task = self.conversionTask, !task.isCancelled else { return }
+              guard let active = self.queue.firstIndex(where: { $0.status == .active }) else {
+                return
+              }
+              self.queue[active].progress = update.progress
+              self.queue[active].message = update.message
+            }
+          }
+          batchCompleted += 1
+          if let current = queue.firstIndex(where: { $0.id == id }) {
+            queue[current].status = .done
+            queue[current].progress = 1
+            queue[current].message = "Selesai"
+            queue[current].resultURL = result.fileURL
+          }
+          addBook(result)
+        } catch is CancellationError {
+          batchCompleted += 1
+          if let current = queue.firstIndex(where: { $0.id == id }) {
+            queue[current].status = .cancelled
+            queue[current].message = "Dibatalkan"
+          }
+          break
+        } catch {
+          batchCompleted += 1
+          let presentation = ErrorPresentation.from(error)
+          if let current = queue.firstIndex(where: { $0.id == id }) {
+            queue[current].status = .failed
+            queue[current].message = presentation.summary
+            queue[current].error = presentation
           }
         }
-        resultFile = result.fileURL
-        addBook(result)
-      } catch is CancellationError {
-        statusText = "Dibatalkan"
-      } catch {
-        errorPresentation = .from(error)
       }
     }
   }
 
   func cancel() {
     guard isConverting, conversionTask != nil else { return }
-    statusText = "Membatalkan…"
+    if let active = queue.firstIndex(where: { $0.status == .active }) {
+      queue[active].message = "Membatalkan…"
+    }
     conversionTask?.cancel()
   }
 
-  private func select(_ url: URL) {
-    guard !isConverting else { return }
-    guard url.pathExtension.lowercased() == "acsm" else {
-      errorPresentation = ErrorPresentation(
-        title: "File tidak didukung",
-        summary: "Pilih file dengan ekstensi .acsm.",
-        detail: "File yang dipilih: \(url.path)"
-      )
-      return
-    }
-    selectedFile = url
-    resultFile = nil
-    statusText = "Mempersiapkan…"
-    page = .convert
-  }
-
   private func addBook(_ result: ConversionResult) {
-    let coverPath = Self.saveCover(result.coverData, id: UUID())
+    let id = UUID()
     let record = BookRecord(
-      id: UUID(),
+      id: id,
       title: result.title,
       author: result.author,
       filePath: result.fileURL.path,
       format: result.format,
-      coverPath: coverPath,
+      coverPath: Self.saveCover(result.coverData, id: id),
       completedAt: Date()
     )
     books.removeAll { $0.filePath == record.filePath }
     books.insert(record, at: 0)
     if let data = try? JSONEncoder().encode(books) {
       UserDefaults.standard.set(data, forKey: "bookshelf")
+    }
+  }
+
+  private static func queueKey(_ url: URL) -> String {
+    url.standardizedFileURL.path.lowercased()
+  }
+
+  private static func fileURL(from provider: NSItemProvider) async -> URL? {
+    await withCheckedContinuation { continuation in
+      provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, _ in
+        if let data = item as? Data {
+          continuation.resume(returning: URL(dataRepresentation: data, relativeTo: nil))
+        } else {
+          continuation.resume(returning: item as? URL)
+        }
+      }
     }
   }
 

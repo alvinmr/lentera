@@ -2,18 +2,20 @@ import SwiftUI
 
 @main
 struct LenteraApp: App {
+  @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
   @State private var converter = ConversionModel()
 
   var body: some Scene {
     WindowGroup {
       ContentView(model: converter)
         .frame(minWidth: 780, minHeight: 560)
+        .onAppear { appDelegate.connect { converter.addFiles($0) } }
     }
     .defaultSize(width: 920, height: 660)
     .windowToolbarStyle(.unified)
     .commands {
       CommandGroup(replacing: .newItem) {
-        Button("Pilih File ACSM…") { converter.chooseFile() }
+        Button("Pilih File ACSM…") { converter.chooseFiles() }
           .keyboardShortcut("o")
           .disabled(converter.isConverting)
       }

@@ -18,6 +18,7 @@
             <key>CFBundleTypeName</key><string>Adobe Content Server Message</string>
             <key>CFBundleTypeExtensions</key><array><string>acsm</string></array>
             <key>CFBundleTypeRole</key><string>Viewer</string>
+            <key>LSHandlerRank</key><string>Default</string>
         </dict>
     </array>
 </dict>

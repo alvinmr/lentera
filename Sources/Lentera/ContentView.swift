@@ -25,7 +25,7 @@ struct ContentView: View {
       .navigationTitle(model.page == .convert ? "Konversi" : "Rak Buku")
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
-          Button(action: model.chooseFile) { Label("Tambah File ACSM", systemImage: "plus") }
+          Button(action: model.chooseFiles) { Label("Tambah File ACSM", systemImage: "plus") }
             .disabled(model.isConverting)
             .help("Pilih file ACSM (⌘O)")
         }
@@ -67,12 +67,13 @@ struct ContentView: View {
               HStack {
                 Text("Format hasil")
                 Spacer()
-                Text(model.resultFile?.pathExtension.uppercased() ?? "Otomatis (EPUB atau PDF)")
+                Text("Otomatis (EPUB atau PDF)")
                   .foregroundStyle(.secondary)
               }
             }
             .padding(8)
           }
+          if !model.queue.isEmpty { queueList }
           status
         }
         Text("Format mengikuti buku dari penyedia. Hasil disimpan di Mac ini.")
@@ -87,14 +88,14 @@ struct ContentView: View {
 
   private var dropZone: some View {
     VStack(spacing: 12) {
-      Image(systemName: model.selectedFile == nil ? "doc.badge.plus" : "doc.text")
+      Image(systemName: model.queue.isEmpty ? "doc.badge.plus" : "doc.on.doc")
         .font(.system(size: 30, weight: .light)).foregroundStyle(.tint)
         .accessibilityHidden(true)
-      Text(model.selectedFile?.lastPathComponent ?? "Seret file ACSM ke sini")
+      Text(model.queue.isEmpty ? "Seret satu atau beberapa file ACSM ke sini" : "Seret file ACSM untuk menambah antrean")
         .font(.headline).lineLimit(2).truncationMode(.middle)
         .multilineTextAlignment(.center)
-        .help(model.selectedFile?.path ?? "File dengan ekstensi .acsm")
-      Button(model.selectedFile == nil ? "Pilih File…" : "Ganti File…", action: model.chooseFile)
+        .help("File dengan ekstensi .acsm")
+      Button(model.queue.isEmpty ? "Pilih File…" : "Tambah File…", action: model.chooseFiles)
         .disabled(model.isConverting)
         .buttonStyle(.bordered)
     }
@@ -110,40 +111,67 @@ struct ContentView: View {
     .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 1), value: model.isDropTargeted)
   }
 
+  private var queueList: some View {
+    VStack(spacing: 0) {
+      ForEach(model.queue) { item in
+        QueueRow(item: item, model: model)
+        if item.id != model.queue.last?.id {
+          Divider().padding(.leading, 44)
+        }
+      }
+    }
+    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+    .overlay {
+      RoundedRectangle(cornerRadius: 12)
+        .strokeBorder(Color(nsColor: .separatorColor))
+    }
+  }
+
   @ViewBuilder private var status: some View {
     if model.isConverting {
       VStack(spacing: 12) {
-        ProgressView(model.statusText, value: model.progress)
+        ProgressView(value: model.overallProgress)
         HStack {
-          Text("\(Int(model.progress * 100))%")
-            .monospacedDigit().foregroundStyle(.secondary)
+          Text(model.batchStatusText)
+            .lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
           Spacer()
           Button("Batalkan", role: .cancel, action: model.cancel)
         }
       }
-    } else if let result = model.resultFile {
-      VStack(spacing: 12) {
-        Label("Buku siap dibaca", systemImage: "checkmark.circle.fill")
-          .font(.headline).foregroundStyle(.green)
-        Text(result.lastPathComponent).lineLimit(2).truncationMode(.middle)
-        HStack {
-          Button("Tampilkan di Finder") { NSWorkspace.shared.activateFileViewerSelecting([result]) }
-          Button("Konversi File Lain…", action: model.chooseFile)
-            .buttonStyle(.borderedProminent)
-        }
-      }
-      .frame(maxWidth: .infinity).padding(.top, 4)
-    } else {
+    } else if model.waitingCount > 0 {
       HStack {
-        Text(model.statusText == "Dibatalkan" ? "Konversi dibatalkan." : model.selectedFile == nil ? "Pilih file untuk memulai." : "File siap dikonversi.")
-          .foregroundStyle(.secondary)
+        Text("\(model.waitingCount) file siap dikonversi.").foregroundStyle(.secondary)
         Spacer()
         Button("Konversi", action: model.convert)
           .buttonStyle(.borderedProminent).controlSize(.large)
-          .disabled(model.selectedFile == nil)
           .keyboardShortcut(.defaultAction)
       }
+    } else if model.succeededCount > 0 {
+      VStack(spacing: 12) {
+        Label("\(model.succeededCount) buku siap dibaca", systemImage: "checkmark.circle.fill")
+          .font(.headline).foregroundStyle(.green)
+        HStack {
+          Button("Tampilkan Semua di Finder", action: revealResults)
+          Button("Bersihkan", action: model.clearFinished)
+        }
+      }
+      .frame(maxWidth: .infinity).padding(.top, 4)
+    } else if !model.queue.isEmpty {
+      HStack {
+        Text("Tidak ada file yang berhasil dikonversi.").foregroundStyle(.secondary)
+        Spacer()
+        Button("Bersihkan", action: model.clearFinished)
+      }
+    } else {
+      Text("Pilih satu atau beberapa file ACSM untuk memulai.")
+        .foregroundStyle(.secondary)
     }
+  }
+
+  private func revealResults() {
+    let urls = model.queue.compactMap { $0.status == .done ? $0.resultURL : nil }
+    guard !urls.isEmpty else { return }
+    NSWorkspace.shared.activateFileViewerSelecting(urls)
   }
 
   private var bookshelfPage: some View {
@@ -179,7 +207,7 @@ struct ContentView: View {
           Text(model.books.isEmpty ? "Buku yang selesai dikonversi akan muncul di sini." : "Coba judul atau penulis lain, atau tampilkan semua buku.")
         } actions: {
           if model.books.isEmpty {
-            Button("Tambah File ACSM…", action: model.chooseFile).disabled(model.isConverting)
+            Button("Tambah File ACSM…", action: model.chooseFiles).disabled(model.isConverting)
           } else {
             Button("Tampilkan Semua") {
               model.shelfFilter = .all
@@ -199,6 +227,79 @@ struct ContentView: View {
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Cari judul atau penulis")
+  }
+}
+
+private struct QueueRow: View {
+  let item: ConversionItem
+  let model: ConversionModel
+
+  var body: some View {
+    HStack(spacing: 12) {
+      icon.frame(width: 20)
+      VStack(alignment: .leading, spacing: 3) {
+        Text(item.fileURL.lastPathComponent)
+          .lineLimit(1).truncationMode(.middle)
+          .help(item.fileURL.path)
+        Text(statusText)
+          .font(.caption)
+          .foregroundStyle(item.status == .failed ? Color.red : Color.secondary)
+          .lineLimit(2)
+      }
+      Spacer(minLength: 8)
+      if item.status == .failed, item.error != nil {
+        Button("Detail") { model.errorPresentation = item.error }
+          .buttonStyle(.borderless)
+      }
+      if item.status == .done, let url = item.resultURL {
+        Button {
+          NSWorkspace.shared.activateFileViewerSelecting([url])
+        } label: {
+          Image(systemName: "folder")
+        }
+        .buttonStyle(.borderless)
+        .help("Tampilkan di Finder")
+      }
+    }
+    .padding(.horizontal, 14).padding(.vertical, 10)
+    .contentShape(Rectangle())
+    .contextMenu {
+      if item.status == .done, let url = item.resultURL {
+        Button("Tampilkan di Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+      }
+      Button("Hapus dari Antrean") { model.removeItem(item.id) }
+        .disabled(model.isConverting || item.status == .active)
+    }
+  }
+
+  @ViewBuilder private var icon: some View {
+    switch item.status {
+    case .waiting:
+      Image(systemName: "circle.dashed").foregroundStyle(.secondary)
+    case .active:
+      ProgressView().controlSize(.small)
+    case .done:
+      Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+    case .failed:
+      Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
+    case .cancelled:
+      Image(systemName: "minus.circle").foregroundStyle(.secondary)
+    }
+  }
+
+  private var statusText: String {
+    switch item.status {
+    case .waiting:
+      return "Menunggu"
+    case .active:
+      return item.message.isEmpty ? "Memproses…" : "\(item.message) · \(Int(item.progress * 100))%"
+    case .done:
+      return "Selesai"
+    case .failed:
+      return item.error?.summary ?? "Gagal"
+    case .cancelled:
+      return "Dibatalkan"
+    }
   }
 }
 
