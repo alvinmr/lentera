@@ -161,14 +161,14 @@ nonisolated struct ConversionService: Sendable {
     }
   }
 
-  private func safeBaseName(_ name: String) -> String {
+  func safeBaseName(_ name: String) -> String {
     let invalid = CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/\\:"))
     let cleaned = name.components(separatedBy: invalid).joined(separator: " ")
       .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
     return String(cleaned.prefix(120)).isEmpty ? "Book" : String(cleaned.prefix(120))
   }
 
-  private func uniqueDestination(directory: URL, baseName: String, extension ext: String) -> URL {
+  func uniqueDestination(directory: URL, baseName: String, extension ext: String) -> URL {
     var candidate = directory.appendingPathComponent(baseName).appendingPathExtension(ext)
     var suffix = 2
     while FileManager.default.fileExists(atPath: candidate.path) {
