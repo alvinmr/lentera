@@ -22,7 +22,6 @@ struct ContentView: View {
         if model.page == .convert { conversionPage } else { bookshelfPage }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
-      .background(Color(nsColor: .windowBackgroundColor))
       .navigationTitle(model.page == .convert ? "Convert" : "Bookshelf")
       .toolbar {
         ToolbarItem(placement: .primaryAction) {
@@ -58,27 +57,27 @@ struct ContentView: View {
 
         VStack(spacing: 16) {
           dropZone
-          GroupBox {
-            VStack(spacing: 12) {
-              HStack {
-                Text("Save to")
-                Spacer()
-                Label(model.destination?.lastPathComponent ?? "Downloads", systemImage: "folder")
-                  .lineLimit(1).truncationMode(.middle)
-                  .help(model.destination?.path ?? "Downloads folder")
-                Button("Change…", action: model.chooseDestination)
-                  .disabled(model.isConverting)
-              }
-              Divider()
-              HStack {
-                Text("Output format")
-                Spacer()
-                Text("Automatic (EPUB or PDF)")
-                  .foregroundStyle(.secondary)
-              }
+          VStack(spacing: 12) {
+            HStack {
+              Text("Save to")
+              Spacer()
+              Label(model.destination?.lastPathComponent ?? "Downloads", systemImage: "folder")
+                .lineLimit(1).truncationMode(.middle)
+                .help(model.destination?.path ?? "Downloads folder")
+              Button("Change…", action: model.chooseDestination)
+                .disabled(model.isConverting)
+                .lenteraButton()
             }
-            .padding(8)
+            Divider()
+            HStack {
+              Text("Output format")
+              Spacer()
+              Text("Automatic (EPUB or PDF)")
+                .foregroundStyle(.secondary)
+            }
           }
+          .padding(14)
+          .lenteraSurface()
           if !model.queue.isEmpty { queueList }
           status
         }
@@ -103,11 +102,11 @@ struct ContentView: View {
         .help("Files with the .acsm extension")
       Button(model.queue.isEmpty ? "Choose Files…" : "Add Files…", action: model.chooseFiles)
         .disabled(model.isConverting)
-        .buttonStyle(.bordered)
+        .lenteraButton()
     }
     .padding(24)
     .frame(maxWidth: .infinity, minHeight: 154)
-    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
+    .lenteraSurface()
     .overlay {
       RoundedRectangle(cornerRadius: 12)
         .strokeBorder(model.isDropTargeted ? Color.accentColor : Color(nsColor: .separatorColor),
@@ -126,11 +125,7 @@ struct ContentView: View {
         }
       }
     }
-    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 12))
-    .overlay {
-      RoundedRectangle(cornerRadius: 12)
-        .strokeBorder(Color(nsColor: .separatorColor))
-    }
+    .lenteraSurface()
   }
 
   @ViewBuilder private var status: some View {
@@ -142,6 +137,7 @@ struct ContentView: View {
             .lineLimit(1).truncationMode(.middle).foregroundStyle(.secondary)
           Spacer()
           Button("Cancel", role: .cancel, action: model.cancel)
+            .lenteraButton()
         }
       }
     } else if model.waitingCount > 0 {
@@ -150,7 +146,7 @@ struct ContentView: View {
           .foregroundStyle(.secondary)
         Spacer()
         Button("Convert", action: model.convert)
-          .buttonStyle(.borderedProminent).controlSize(.large)
+          .lenteraProminentButton().controlSize(.large)
           .keyboardShortcut(.defaultAction)
       }
     } else if model.succeededCount > 0 {
@@ -160,7 +156,9 @@ struct ContentView: View {
           .font(.headline).foregroundStyle(.green)
         HStack {
           Button("Reveal All in Finder", action: revealResults)
+            .lenteraButton()
           Button("Clear", action: model.clearFinished)
+            .lenteraButton()
         }
       }
       .frame(maxWidth: .infinity).padding(.top, 4)
@@ -169,6 +167,7 @@ struct ContentView: View {
         Text("No files were converted.").foregroundStyle(.secondary)
         Spacer()
         Button("Clear", action: model.clearFinished)
+          .lenteraButton()
       }
     } else {
       Text("Choose one or more ACSM files to get started.")
@@ -253,12 +252,10 @@ struct ContentView: View {
       Text(model.missingBookIDs.count == 1 ? "1 book file is missing." : "\(model.missingBookIDs.count) book files are missing.")
       Spacer()
       Button("Remove Missing", action: model.removeMissingBooks)
+        .lenteraButton()
     }
     .padding(12)
-    .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 10))
-    .overlay {
-      RoundedRectangle(cornerRadius: 10).strokeBorder(Color(nsColor: .separatorColor))
-    }
+    .lenteraSurface(cornerRadius: 10)
     .padding(.horizontal, 24).padding(.bottom, 16)
   }
 }
@@ -417,12 +414,13 @@ private struct BookDetailsEditor: View {
       HStack {
         Spacer()
         Button("Cancel", role: .cancel) { dismiss() }
+          .lenteraButton()
           .keyboardShortcut(.cancelAction)
         Button("Save") {
           onSave(title, author.isEmpty ? nil : author)
           dismiss()
         }
-        .buttonStyle(.borderedProminent)
+        .lenteraProminentButton()
         .keyboardShortcut(.defaultAction)
         .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
@@ -458,12 +456,14 @@ private struct ErrorDetailView: View {
       }
       DisclosureGroup("Technical details", isExpanded: $detailExpanded) {
         ScrollView { Text(error.detail).font(.system(size: 11, design: .monospaced)).textSelection(.enabled).frame(maxWidth: .infinity, alignment: .leading).padding(12) }
-          .frame(height: 170).background(Color(nsColor: .textBackgroundColor), in: RoundedRectangle(cornerRadius: 8)).padding(.top, 10)
+          .frame(height: 170).lenteraSurface(cornerRadius: 8).padding(.top, 10)
       }
       HStack {
         Button("Copy details") { NSPasteboard.general.clearContents(); NSPasteboard.general.setString(error.detail, forType: .string) }
+          .lenteraButton()
         Spacer()
         Button("Close") { dismiss() }.keyboardShortcut(.defaultAction)
+          .lenteraProminentButton()
       }
     }
     .padding(26).frame(width: 520)
