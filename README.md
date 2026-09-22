@@ -1,6 +1,22 @@
 # Lentera
 
-Lentera is a native macOS app for converting Adobe ACSM license files into the EPUB or PDF file returned by the authorized book provider. Conversion happens locally through the bundled libgourou tools, and completed books appear in a local bookshelf.
+[![Release](https://img.shields.io/github/v/release/alvinmr/lentera)](https://github.com/alvinmr/lentera/releases/latest)
+[![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20Apple%20Silicon-blue)](https://github.com/alvinmr/lentera/releases/latest)
+
+Lentera is a native macOS app that converts Adobe ACSM license files into the EPUB or PDF file returned by the authorized book provider. It is a local alternative to Adobe Digital Editions for getting books you own into the reader you actually use.
+
+![Lentera converting a batch of ACSM files](docs/screenshots/queue.png)
+
+## Features
+
+- **Batch conversion** — drag in one or many `.acsm` files; they convert one after another, and a failed book does not stop the queue.
+- **EPUB or PDF** — the provider decides the format. Lentera saves the file with the book's real title and author.
+- **Local bookshelf** — converted books appear with covers, search, a format filter, and sorting. Open a book in its default app, reveal it in Finder, edit its details, or move it to the Trash.
+- **Missing file detection** — books whose files were moved or deleted are flagged so you can clean up the shelf.
+- **Automatic updates** — built-in [Sparkle](https://sparkle-project.org) updates keep the app current.
+- **Private by design** — conversion runs entirely on your Mac through the bundled libgourou tools. Book files never pass through a third-party server.
+
+![Lentera bookshelf with covers](docs/screenshots/bookshelf.png)
 
 ## Download
 
@@ -16,7 +32,7 @@ The app is ad-hoc signed and is **not Apple-notarized**. If macOS blocks it, att
 2. Click **Choose Files…**, or drag one or more `.acsm` files into the drop area. Double-clicking an `.acsm` file in Finder opens Lentera and adds it to the queue.
 3. Choose a destination folder if `Downloads` is not suitable.
 4. Click **Convert**. Files are converted one at a time; a failed book does not stop the rest of the queue. The provider determines whether each returned file is EPUB or PDF.
-5. Open **Bookshelf** to find completed books. Click a book to reveal its file in Finder.
+5. Open **Bookshelf** to find completed books. Click a book to open it, or right-click for options.
 
 Lentera needs an ACSM file for a book you are authorized to access. An ACSM file is a license message, not the book itself; the provider and Adobe services still need to fulfill the license during conversion.
 
@@ -73,6 +89,17 @@ swift test
 ```
 
 The build script bundles the required dynamic libraries, embeds the Lentera app icon, and ad-hoc signs the resulting app for local use. Run `Scripts/build-dmg.sh` afterward to create a compressed DMG in `build/`; its version comes from the built app.
+
+## Troubleshooting
+
+- **"This ACSM file has expired."** ACSM files are time-limited. Download a fresh copy from the book provider and try again.
+- **"This ACSM was already opened with another device or account."** Fulfill the license with the same authorization you used before, or download a new ACSM from the provider.
+- **"The Google Play device limit has been reached."** Remove an old device authorization in your Google Play Books settings, then retry.
+- **"The book provider is rate limiting requests."** Wait 5–15 minutes before trying again.
+- **The book converted, but the file is not where you expect.** Lentera saves to the folder shown under **Save to** (defaults to `Downloads`) using the book's title, and appends ` 2`, ` 3`, … if a file with that name exists.
+- **macOS says the app cannot be verified.** Open it once, then allow it from **System Settings > Privacy & Security**. The app is not notarized.
+- **Intel Macs are not supported.** The release binary is Apple Silicon only; build from source for other setups.
+- **Where is my data?** The anonymous Adobe device identity and bookshelf metadata live in `~/Library/Application Support/Lentera`. Removing the app and that folder removes everything Lentera stores.
 
 ## Automated Releases
 
