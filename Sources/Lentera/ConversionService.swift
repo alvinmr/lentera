@@ -1,4 +1,5 @@
 import Foundation
+import PDFKit
 import os
 
 // Bundle.module is generated main-actor-isolated under default actor isolation,
@@ -245,7 +246,12 @@ nonisolated struct BookMetadata: Sendable {
   let coverData: Data?
 
   @concurrent static func read(from file: URL, fallbackTitle: String) async -> BookMetadata {
-    guard file.pathExtension.lowercased() == "epub" else {
+    let fileExtension = file.pathExtension.lowercased()
+    if fileExtension == "pdf" {
+      return BookMetadata(
+        title: fallbackTitle, author: "Author unavailable", coverData: pdfCoverData(file))
+    }
+    guard fileExtension == "epub" else {
       return BookMetadata(title: fallbackTitle, author: "Author unavailable", coverData: nil)
     }
 
@@ -288,6 +294,19 @@ nonisolated struct BookMetadata: Sendable {
       let value = node.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines), !value.isEmpty
     else { return nil }
     return value
+  }
+
+  private static func pdfCoverData(_ file: URL) -> Data? {
+    guard let page = PDFDocument(url: file)?.page(at: 0) else { return nil }
+    let bounds = page.bounds(for: .mediaBox)
+    guard bounds.width > 0, bounds.height > 0 else { return nil }
+    let width: CGFloat = 600
+    let size = NSSize(width: width, height: width * bounds.height / bounds.width)
+    let thumbnail = page.thumbnail(of: size, for: .mediaBox)
+    guard let tiff = thumbnail.tiffRepresentation,
+      let representation = NSBitmapImageRep(data: tiff)
+    else { return nil }
+    return representation.representation(using: .jpeg, properties: [.compressionFactor: 0.8])
   }
 
   private static func unzipData(_ file: URL, entry: String) -> Data? {

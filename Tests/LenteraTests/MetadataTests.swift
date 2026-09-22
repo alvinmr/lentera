@@ -1,4 +1,5 @@
 import AppKit
+import PDFKit
 import Testing
 @testable import Lentera
 
@@ -59,4 +60,25 @@ func readsEPUBMetadataWithDifferentNamespacesAndAttributeOrder(epub3: Bool) asyn
   let metadata = await BookMetadata.read(from: URL(fileURLWithPath: "/nonexistent/fixture.epub"), fallbackTitle: "Fallback")
   #expect(metadata.title == "Fallback")
   #expect(metadata.coverData == nil)
+}
+
+@Test func readsPDFCoverFromFirstPage() async throws {
+  let fileManager = FileManager.default
+  let directory = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? fileManager.removeItem(at: directory) }
+
+  let pageImage = NSImage(size: NSSize(width: 300, height: 450))
+  pageImage.lockFocus()
+  NSColor.systemIndigo.setFill()
+  NSRect(x: 0, y: 0, width: 300, height: 450).fill()
+  pageImage.unlockFocus()
+  let document = PDFDocument()
+  document.insert(PDFPage(image: pageImage)!, at: 0)
+  let url = directory.appendingPathComponent("fixture.pdf")
+  #expect(document.write(to: url))
+
+  let metadata = await BookMetadata.read(from: url, fallbackTitle: "Fallback")
+  #expect(metadata.title == "Fallback")
+  #expect(metadata.coverData != nil)
 }

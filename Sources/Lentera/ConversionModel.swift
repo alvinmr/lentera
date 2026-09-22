@@ -206,7 +206,7 @@ final class ConversionModel {
   }
 
   func refreshBookMetadata() async {
-    for book in books where book.format == .epub && book.edited != true {
+    for book in books where book.edited != true {
       let hasCover = book.coverURL.flatMap { NSImage(contentsOf: $0) } != nil
       guard book.author == nil || !hasCover else { continue }
       let metadata = await BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
