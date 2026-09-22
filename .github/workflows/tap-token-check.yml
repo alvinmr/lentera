@@ -1,0 +1,27 @@
+name: Tap token check
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Verify push access to the Homebrew tap
+        env:
+          TAP_GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}
+        run: |
+          if [[ -z "$TAP_GITHUB_TOKEN" ]]; then
+            echo "::error::TAP_GITHUB_TOKEN secret is not set."
+            exit 1
+          fi
+          git clone --depth 1 "https://x-access-token:${TAP_GITHUB_TOKEN}@github.com/alvinmr/homebrew-tap.git" tap
+          cd tap
+          BRANCH="token-check-${GITHUB_RUN_ID}"
+          git checkout -b "$BRANCH"
+          git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit --allow-empty -m "Token check"
+          git push origin "$BRANCH"
+          git push origin --delete "$BRANCH"
+          echo "Push access confirmed."
