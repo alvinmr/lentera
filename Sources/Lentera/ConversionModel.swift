@@ -1,4 +1,5 @@
 import AppKit
+import CryptoKit
 import Observation
 import SwiftUI
 import UniformTypeIdentifiers
@@ -36,10 +37,11 @@ nonisolated struct BookRecord: Codable, Identifiable, Sendable {
   let coverPath: String?
   let completedAt: Date
   let edited: Bool?
+  let acsmFingerprint: String?
 
   init(
     id: UUID, title: String, author: String?, filePath: String, format: OutputFormat,
-    coverPath: String?, completedAt: Date, edited: Bool? = nil
+    coverPath: String?, completedAt: Date, edited: Bool? = nil, acsmFingerprint: String? = nil
   ) {
     self.id = id
     self.title = title
@@ -49,6 +51,7 @@ nonisolated struct BookRecord: Codable, Identifiable, Sendable {
     self.coverPath = coverPath
     self.completedAt = completedAt
     self.edited = edited
+    self.acsmFingerprint = acsmFingerprint
   }
 
   var fileURL: URL { URL(fileURLWithPath: filePath) }
@@ -105,7 +108,14 @@ nonisolated enum QueueItemState: Equatable, Sendable {
 nonisolated struct ConversionItem: Identifiable, Equatable, Sendable {
   let id: UUID
   let fileURL: URL
+  let fingerprint: String?
   var state: QueueItemState = .waiting
+
+  init(id: UUID, fileURL: URL, fingerprint: String? = nil) {
+    self.id = id
+    self.fileURL = fileURL
+    self.fingerprint = fingerprint
+  }
 
   var isWaiting: Bool { state == .waiting }
   var isActive: Bool { if case .active = state { true } else { false } }
@@ -320,7 +330,9 @@ final class ConversionModel {
 
   func addFiles(_ urls: [URL]) {
     var known = Set(queue.map { Self.queueKey($0.fileURL) })
+    var knownFingerprints = Set(books.compactMap(\.acsmFingerprint))
     var rejected: [URL] = []
+    var alreadyConverted: [BookRecord] = []
     var added = 0
     for url in urls {
       guard url.pathExtension.lowercased() == "acsm" else {
@@ -328,11 +340,28 @@ final class ConversionModel {
         continue
       }
       guard known.insert(Self.queueKey(url)).inserted else { continue }
-      queue.append(ConversionItem(id: UUID(), fileURL: url))
+      let fingerprint = Self.fingerprint(of: url)
+      if let fingerprint {
+        if let existing = books.first(where: { $0.acsmFingerprint == fingerprint }) {
+          alreadyConverted.append(existing)
+          continue
+        }
+        knownFingerprints.insert(fingerprint)
+      }
+      queue.append(ConversionItem(id: UUID(), fileURL: url, fingerprint: fingerprint))
       added += 1
     }
     if added > 0 { page = .convert }
-    if !rejected.isEmpty {
+    if !alreadyConverted.isEmpty {
+      errorPresentation = ErrorPresentation(
+        title: "Already converted",
+        summary: alreadyConverted.count == 1
+          ? "This ACSM was already converted to “\(alreadyConverted[0].title)”."
+          : "\(alreadyConverted.count) files were already converted: "
+            + alreadyConverted.map(\.title).joined(separator: ", ") + ".",
+        detail: alreadyConverted.map(\.filePath).joined(separator: "\n")
+      )
+    } else if !rejected.isEmpty {
       errorPresentation = ErrorPresentation(
         title: rejected.count == 1 ? "Unsupported file" : "Some files are unsupported",
         summary: "Only files with the .acsm extension can be converted.",
@@ -388,7 +417,8 @@ final class ConversionModel {
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].state = .done(resultURL: result.fileURL)
           }
-          addBook(result)
+          addBook(result, fingerprint: queue.first(where: { $0.id == id })?.fingerprint)
+          Log.conversion.notice("Converted a book to \(result.format.rawValue, privacy: .public)")
         } catch is CancellationError {
           batchCancelled = true
           batchCompleted += 1
@@ -433,7 +463,7 @@ final class ConversionModel {
     notify("Conversion finished", body)
   }
 
-  private func addBook(_ result: ConversionResult) {
+  private func addBook(_ result: ConversionResult, fingerprint: String?) {
     let id = UUID()
     let record = BookRecord(
       id: id,
@@ -442,7 +472,8 @@ final class ConversionModel {
       filePath: result.fileURL.path,
       format: result.format,
       coverPath: Self.saveCover(result.coverData, id: id),
-      completedAt: Date()
+      completedAt: Date(),
+      acsmFingerprint: fingerprint
     )
     books.removeAll { $0.filePath == record.filePath }
     books.insert(record, at: 0)
@@ -462,6 +493,11 @@ final class ConversionModel {
 
   private static func queueKey(_ url: URL) -> String {
     url.standardizedFileURL.path.lowercased()
+  }
+
+  nonisolated static func fingerprint(of url: URL) -> String? {
+    guard let data = try? Data(contentsOf: url) else { return nil }
+    return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
 
   private static func fileURL(from provider: NSItemProvider) async -> URL? {

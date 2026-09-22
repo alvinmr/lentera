@@ -150,6 +150,40 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   try await waitForBatch(model)
   #expect(notifications == 0)
 }
+
+@MainActor @Test func skipsAlreadyConvertedFiles() async throws {
+  let fileManager = FileManager.default
+  let directory = fileManager.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? fileManager.removeItem(at: directory) }
+  let acsmURL = directory.appendingPathComponent("book.acsm")
+  try Data("same-license".utf8).write(to: acsmURL)
+
+  let model = ConversionModel(
+    books: [],
+    convert: { _, destination, _ in
+      ConversionResult(
+        fileURL: destination.appendingPathComponent("Book.epub"),
+        title: "Book", author: "Author", format: .epub, coverData: nil)
+    })
+  model.addFiles([acsmURL])
+  model.convert()
+  try await waitForBatch(model)
+  #expect(model.books.first?.acsmFingerprint != nil)
+
+  model.clearFinished()
+  model.addFiles([acsmURL])
+  #expect(model.queue.isEmpty)
+  #expect(model.errorPresentation?.title == "Already converted")
+
+  let copyURL = directory.appendingPathComponent("copy.acsm")
+  try Data("same-license".utf8).write(to: copyURL)
+  model.errorPresentation = nil
+  model.addFiles([copyURL])
+  #expect(model.queue.isEmpty)
+  #expect(model.errorPresentation?.title == "Already converted")
+}
+
 @MainActor @Test func loadsSavedDestination() {
   let defaults = UserDefaults.standard
   let previous = defaults.string(forKey: "destinationPath")
