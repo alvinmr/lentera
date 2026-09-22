@@ -2,6 +2,7 @@
 
 [![Release](https://img.shields.io/github/v/release/alvinmr/lentera)](https://github.com/alvinmr/lentera/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-macOS%2014%2B%20Apple%20Silicon-blue)](https://github.com/alvinmr/lentera/releases/latest)
+[![License: MIT](https://img.shields.io/github/license/alvinmr/lentera)](LICENSE)
 
 Lentera is a native macOS app that converts Adobe ACSM license files into the EPUB or PDF file returned by the authorized book provider. It is a local alternative to Adobe Digital Editions for getting books you own into the reader you actually use.
 
@@ -25,6 +26,13 @@ Download the latest `Lentera-v<version>-macOS.dmg` from the [GitHub Releases](ht
 The release requires **Apple Silicon (M1 or later), macOS 14+**, and an internet connection for fulfillment. Intel Macs are not supported by this binary.
 
 The app is ad-hoc signed and is **not Apple-notarized**. If macOS blocks it, attempt to open it once, then use **System Settings > Privacy & Security > Open Anyway** if you trust this download. Lentera does not require Homebrew or a separate runtime when using the release build.
+
+Alternatively, install with [Homebrew](https://brew.sh) to skip the Gatekeeper prompt (Homebrew downloads are not quarantined):
+
+```sh
+brew tap alvinmr/tap
+brew install --cask lentera
+```
 
 ## Use
 
@@ -125,4 +133,4 @@ The matching libgourou and uPDFParser source and licenses are included under `Ve
 
 ## Legal
 
-Use Lentera only for books you are authorized to access and where local law permits format shifting. libgourou is licensed under LGPL-3.0; distributions bundling it must include its license and corresponding source or a compliant source offer.
+The app's own source is MIT licensed (see `LICENSE`). The bundled conversion engine builds on libgourou, which is LGPL-3.0; the vendored source and license ship in `Vendor/libgourou` and the license is also included in the app bundle. Use Lentera only for books you are authorized to access and where local law permits format shifting.
