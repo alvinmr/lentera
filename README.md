@@ -4,7 +4,7 @@ Lentera is a native macOS app for converting Adobe ACSM license files into the E
 
 ## Download
 
-Download the latest `Lentera-<version>-macOS.zip` from the [GitHub Releases](https://github.com/alvinmr/lentera/releases) page, unzip it, and move `Lentera.app` to `/Applications`.
+Download the latest `Lentera-v<version>-macOS.dmg` from the [GitHub Releases](https://github.com/alvinmr/lentera/releases) page. Open it, drag `Lentera.app` onto the `Applications` shortcut, then eject the disk image and launch Lentera from Applications. A ZIP download is also available.
 
 The release requires **Apple Silicon (M1 or later), macOS 14+**, and an internet connection for fulfillment. Intel Macs are not supported by this binary.
 
@@ -56,7 +56,7 @@ Run the tests with:
 swift test
 ```
 
-The build script bundles the required dynamic libraries, embeds the Lentera app icon, and ad-hoc signs the resulting app for local use.
+The build script bundles the required dynamic libraries, embeds the Lentera app icon, and ad-hoc signs the resulting app for local use. Run `Scripts/build-dmg.sh` afterward to create a compressed DMG in `build/`; its version comes from the built app.
 
 ## Automated Releases
 
@@ -66,11 +66,11 @@ Releases are managed by GitHub Actions with [Release Please](https://github.com/
 - `feat:` increments the minor version (`0.1.0` → `0.2.0`)
 - `feat!:` or `BREAKING CHANGE:` increments the major version (`0.1.0` → `1.0.0`)
 
-A push to `main` opens or updates a release PR. Merge that PR to create the tag and GitHub Release. A dependent job in the same workflow then builds the app on an Apple Silicon `macos-15` runner, packages `Lentera.app`, and uploads the versioned ZIP automatically.
+A push to `main` opens or updates a release PR. Merge that PR to create the tag and GitHub Release. A dependent job in the same workflow then builds the app on an Apple Silicon `macos-15` runner, packages `Lentera.app`, and uploads the versioned DMG and ZIP automatically.
 
 The workflow expects the repository's default `GITHUB_TOKEN`; no personal token is required. For a release to work, the repository must have Actions enabled and the Homebrew dependencies listed above must remain available.
 
-You can also run **Actions > Release > Run workflow** to verify a build without publishing a new version. The ZIP is available as a workflow artifact. GitHub Actions must be allowed to create pull requests under **Settings > Actions > General > Workflow permissions**.
+You can also run **Actions > Release > Run workflow** to verify a build without publishing a new version. The DMG and ZIP are available as workflow artifacts. GitHub Actions must be allowed to create pull requests under **Settings > Actions > General > Workflow permissions**.
 
 ## Privacy
 
