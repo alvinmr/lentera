@@ -115,3 +115,38 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   try await waitForBatch(model)
 }
 
+@MainActor @Test func notifiesOnceWhenBatchFinishes() async throws {
+  var notifications: [String] = []
+  let model = ConversionModel(
+    books: [],
+    convert: { file, destination, _ in
+      let title = file.deletingPathExtension().lastPathComponent
+      return ConversionResult(
+        fileURL: destination.appendingPathComponent("\(title).epub"),
+        title: title, author: "Author", format: .epub, coverData: nil)
+    },
+    notify: { _, body in notifications.append(body) })
+  model.addFiles([acsm("one.acsm"), acsm("two.acsm")])
+  model.convert()
+  try await waitForBatch(model)
+  #expect(notifications == ["2 books are ready to read."])
+}
+
+@MainActor @Test func cancelDoesNotNotify() async throws {
+  var notifications = 0
+  let model = ConversionModel(
+    books: [],
+    convert: { _, _, _ in
+      try await Task.sleep(for: .seconds(30))
+      throw ConversionError.invalidInput
+    },
+    notify: { _, _ in notifications += 1 })
+  model.addFiles([acsm("one.acsm")])
+  model.convert()
+  for _ in 0..<600 where model.queue.first?.isActive != true {
+    try await Task.sleep(for: .milliseconds(10))
+  }
+  model.cancel()
+  try await waitForBatch(model)
+  #expect(notifications == 0)
+}

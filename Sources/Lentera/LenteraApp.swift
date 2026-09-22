@@ -4,7 +4,7 @@ import SwiftUI
 @main
 struct LenteraApp: App {
   @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-  @State private var converter = ConversionModel()
+  @State private var converter = ConversionModel(notify: BatchNotification.post)
   private let updaterController: SPUStandardUpdaterController
 
   init() {

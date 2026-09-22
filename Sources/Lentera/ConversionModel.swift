@@ -121,6 +121,8 @@ nonisolated struct ConversionItem: Identifiable, Equatable, Sendable {
 typealias ConversionOperation =
   @Sendable (URL, URL, @escaping @Sendable (ProgressUpdate) -> Void) async throws -> ConversionResult
 
+typealias BatchNotifier = @MainActor (String, String) -> Void
+
 @MainActor
 @Observable
 final class ConversionModel {
@@ -172,14 +174,22 @@ final class ConversionModel {
   private var conversionTask: Task<Void, Never>?
   private var batchTotal = 0
   private var batchCompleted = 0
+  private var batchSucceeded = 0
+  private var batchFailed = 0
+  private var batchCancelled = false
   private let convertOperation: ConversionOperation
+  private let notify: BatchNotifier
 
-  init(books: [BookRecord]? = nil, convert: ConversionOperation? = nil) {
+  init(
+    books: [BookRecord]? = nil, convert: ConversionOperation? = nil,
+    notify: BatchNotifier? = nil
+  ) {
     self.convertOperation =
       convert ?? { acsm, destination, progress in
         try await ConversionService().convert(
           acsm: acsm, destination: destination, progress: progress)
       }
+    self.notify = notify ?? { _, _ in }
     if let books {
       self.books = books
       return
@@ -343,11 +353,15 @@ final class ConversionModel {
     errorPresentation = nil
     batchTotal = waitingCount
     batchCompleted = 0
+    batchSucceeded = 0
+    batchFailed = 0
+    batchCancelled = false
 
     conversionTask = Task {
       defer {
         isConverting = false
         conversionTask = nil
+        notifyBatchOutcome()
       }
       for index in queue.indices where queue[index].isWaiting {
         if Task.isCancelled { break }
@@ -364,11 +378,13 @@ final class ConversionModel {
             }
           }
           batchCompleted += 1
+          batchSucceeded += 1
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].state = .done(resultURL: result.fileURL)
           }
           addBook(result)
         } catch is CancellationError {
+          batchCancelled = true
           batchCompleted += 1
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].state = .cancelled
@@ -376,6 +392,7 @@ final class ConversionModel {
           break
         } catch {
           batchCompleted += 1
+          batchFailed += 1
           if let current = queue.firstIndex(where: { $0.id == id }) {
             queue[current].state = .failed(ErrorPresentation.from(error))
           }
@@ -398,6 +415,16 @@ final class ConversionModel {
       queue[active].state = .active(progress: queue[active].progress, message: "Canceling…")
     }
     conversionTask?.cancel()
+  }
+
+  private func notifyBatchOutcome() {
+    guard !batchCancelled, batchSucceeded + batchFailed > 0 else { return }
+    var body =
+      batchSucceeded == 1 ? "1 book is ready to read." : "\(batchSucceeded) books are ready to read."
+    if batchFailed > 0 {
+      body += batchFailed == 1 ? " 1 file failed." : " \(batchFailed) files failed."
+    }
+    notify("Conversion finished", body)
   }
 
   private func addBook(_ result: ConversionResult) {
