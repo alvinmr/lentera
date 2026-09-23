@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.3.0](https://github.com/alvinmr/lentera/compare/v1.2.0...v1.3.0) (2026-09-23)
+
+
+### Features
+
+* add a list view and a cover size slider to the bookshelf ([675175c](https://github.com/alvinmr/lentera/commit/675175c86715e11d2de8ec90733366936ab67376))
+* open Quick Look with Space or from the context menu ([675175c](https://github.com/alvinmr/lentera/commit/675175c86715e11d2de8ec90733366936ab67376))
+* return library loans from the bookshelf ([675175c](https://github.com/alvinmr/lentera/commit/675175c86715e11d2de8ec90733366936ab67376))
+
+
+### Bug Fixes
+
+* align the author and tags of books on the same shelf ([675175c](https://github.com/alvinmr/lentera/commit/675175c86715e11d2de8ec90733366936ab67376))
+* remove the duplicate icon and the Output format row from the Convert page ([675175c](https://github.com/alvinmr/lentera/commit/675175c86715e11d2de8ec90733366936ab67376))
+* stop marking unexpired ACSM files as expired in the queue ([7ee29af](https://github.com/alvinmr/lentera/commit/7ee29af9a4fc86d68420c08e11ceaa98d135914b))
+
 ## [1.2.0](https://github.com/alvinmr/lentera/compare/v1.1.0...v1.2.0) (2026-09-23)
 
 
