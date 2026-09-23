@@ -37,7 +37,7 @@ nonisolated struct ACSMInfo: Equatable, Sendable {
     }
   }
 
-  private static func date(from text: String) -> Date? {
+  static func date(from text: String) -> Date? {
     let formatter = ISO8601DateFormatter()
     if let date = formatter.date(from: text) { return date }
     formatter.formatOptions.insert(.withFractionalSeconds)

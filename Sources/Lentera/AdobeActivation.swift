@@ -4,6 +4,8 @@ import Foundation
 /// Moving it to another Mac lets that Mac open books licensed to this device.
 nonisolated enum AdobeActivation {
   static let requiredFiles = ["activation.xml", "device.xml", "devicesalt"]
+  /// Loan tokens travel with the activation, because only that device can return the loans.
+  static let optionalFolders = ["loans"]
 
   enum Account: Equatable, Sendable {
     case anonymous
@@ -62,7 +64,8 @@ nonisolated enum AdobeActivation {
     let folder = staging.appendingPathComponent("Lentera Activation", isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: staging) }
-    for name in requiredFiles {
+    for name in requiredFiles + optionalFolders
+    where FileManager.default.fileExists(atPath: directory.appendingPathComponent(name).path) {
       try FileManager.default.copyItem(
         at: directory.appendingPathComponent(name), to: folder.appendingPathComponent(name))
     }
@@ -103,7 +106,8 @@ nonisolated enum AdobeActivation {
     let replacement = parent.appendingPathComponent(".adept-import-\(UUID().uuidString)", isDirectory: true)
     defer { try? fileManager.removeItem(at: replacement) }
     try fileManager.createDirectory(at: replacement, withIntermediateDirectories: false)
-    for name in requiredFiles {
+    for name in requiredFiles + optionalFolders
+    where fileManager.fileExists(atPath: found.appendingPathComponent(name).path) {
       try fileManager.copyItem(
         at: found.appendingPathComponent(name), to: replacement.appendingPathComponent(name))
     }

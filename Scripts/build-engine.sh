@@ -34,6 +34,7 @@ make -C "$SOURCE" clean all BUILD_STATIC=1 BUILD_SHARED=0 STATIC_UTILS=1 \
   CXXFLAGS="$COMMON_FLAGS -I$SOURCE/include -I$SOURCE/lib/updfparser/include -I$DEPS/include" \
   LDFLAGS="-L$DEPS/lib -mmacosx-version-min=$TARGET -Wl,-rpath,@loader_path/lib -lcurl -lzip -lpugixml -lssl -lcrypto -lz"
 mkdir -p "$DEST"
-cp "$SOURCE/utils/acsmdownloader" "$SOURCE/utils/adept_activate" "$SOURCE/utils/adept_remove" "$DEST/"
+cp "$SOURCE/utils/acsmdownloader" "$SOURCE/utils/adept_activate" "$SOURCE/utils/adept_remove" \
+  "$SOURCE/utils/adept_loan_mgt" "$DEST/"
 
 echo "Engine copied to $DEST"

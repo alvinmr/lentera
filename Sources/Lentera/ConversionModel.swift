@@ -30,18 +30,22 @@ nonisolated enum ShelfSort: String, CaseIterable {
 
 nonisolated struct BookRecord: Codable, Identifiable, Sendable {
   let id: UUID
-  let title: String
-  let author: String?
+  var title: String
+  var author: String?
   let filePath: String
   let format: OutputFormat
-  let coverPath: String?
+  var coverPath: String?
   let completedAt: Date
-  let edited: Bool?
-  let acsmFingerprint: String?
+  var edited: Bool?
+  var acsmFingerprint: String?
+  /// The adept_loan_mgt ID when the book is a library loan.
+  var loanID: String?
+  var loanExpiresAt: Date?
 
   init(
     id: UUID, title: String, author: String?, filePath: String, format: OutputFormat,
-    coverPath: String?, completedAt: Date, edited: Bool? = nil, acsmFingerprint: String? = nil
+    coverPath: String?, completedAt: Date, edited: Bool? = nil, acsmFingerprint: String? = nil,
+    loan: Loan? = nil
   ) {
     self.id = id
     self.title = title
@@ -52,10 +56,17 @@ nonisolated struct BookRecord: Codable, Identifiable, Sendable {
     self.completedAt = completedAt
     self.edited = edited
     self.acsmFingerprint = acsmFingerprint
+    self.loanID = loan?.id
+    self.loanExpiresAt = loan?.expiresAt
   }
 
   var fileURL: URL { URL(fileURLWithPath: filePath) }
   var coverURL: URL? { coverPath.map(URL.init(fileURLWithPath:)) }
+  var isLoan: Bool { loanID != nil }
+
+  func isLoanExpired(at now: Date = Date()) -> Bool {
+    loanExpiresAt.map { $0 <= now } ?? false
+  }
 }
 
 nonisolated enum CoverChange: Equatable, Sendable {
@@ -71,6 +82,7 @@ nonisolated struct ConversionResult: Sendable {
   let author: String
   let format: OutputFormat
   let coverData: Data?
+  var loan: Loan? = nil
 }
 
 nonisolated struct ErrorPresentation: Identifiable, Equatable {
@@ -145,6 +157,8 @@ typealias ConversionOperation =
 
 typealias BatchNotifier = @MainActor (String, String) -> Void
 
+typealias ReturnLoanOperation = @Sendable (String) async throws -> Void
+
 @MainActor
 @Observable
 final class ConversionModel {
@@ -161,6 +175,8 @@ final class ConversionModel {
   /// Books converted in this session that have not been shown on the shelf yet.
   var recentlyAddedBookIDs: Set<UUID> = []
   var errorPresentation: ErrorPresentation?
+  /// Loans that are being returned to the provider now.
+  var returningBookIDs: Set<UUID> = []
 
   var waitingCount: Int { queue.filter(\.isWaiting).count }
   var succeededCount: Int { queue.filter(\.isDone).count }
@@ -202,12 +218,15 @@ final class ConversionModel {
   private var batchFailed = 0
   private var batchCancelled = false
   private let convertOperation: ConversionOperation
+  private let returnLoanOperation: ReturnLoanOperation
   private let notify: BatchNotifier
 
   init(
     books: [BookRecord]? = nil, convert: ConversionOperation? = nil,
-    notify: BatchNotifier? = nil
+    notify: BatchNotifier? = nil, returnLoan: ReturnLoanOperation? = nil
   ) {
+    self.returnLoanOperation =
+      returnLoan ?? { id in try await ConversionService().returnLoan(id: id) }
     self.convertOperation =
       convert ?? { acsm, destination, progress in
         try await ConversionService().convert(
@@ -227,6 +246,7 @@ final class ConversionModel {
       self.books = saved
       Task { [weak self] in
         await self?.refreshBookMetadata()
+        self?.linkLoans(LoanStore.all())
         self?.persistBooks()
       }
     }
@@ -238,18 +258,53 @@ final class ConversionModel {
       guard book.author == nil || !hasCover else { continue }
       let metadata = await BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
       guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
-      var coverPath = book.coverPath
+      var updated = self.books[index]
+      updated.title = metadata.title
+      updated.author = book.author ?? metadata.author
       if !hasCover {
         // Drop a missing or broken cover even when the book has none to replace it.
-        coverPath = Self.saveCover(metadata.coverData, id: book.id)
+        updated.coverPath = Self.saveCover(metadata.coverData, id: book.id)
         Self.deleteCover(book.coverPath)
       }
-      self.books[index] = BookRecord(
-        id: book.id, title: metadata.title, author: book.author ?? metadata.author,
-        filePath: book.filePath, format: book.format, coverPath: coverPath,
-        completedAt: book.completedAt, acsmFingerprint: book.acsmFingerprint)
+      self.books[index] = updated
     }
     refreshMissingFiles()
+  }
+
+  /// Books converted before Lentera tracked loans get their loan by title,
+  /// when exactly one unlinked book has that title.
+  func linkLoans(_ loans: [Loan]) {
+    let linked = Set(books.compactMap(\.loanID))
+    for loan in loans where !linked.contains(loan.id) && !loan.name.isEmpty {
+      let matches = books.indices.filter {
+        books[$0].loanID == nil
+          && books[$0].title.localizedCaseInsensitiveCompare(loan.name) == .orderedSame
+      }
+      guard matches.count == 1 else { continue }
+      books[matches[0]].loanID = loan.id
+      books[matches[0]].loanExpiresAt = loan.expiresAt
+    }
+  }
+
+  /// Returns the loan to the provider, then moves the book file to the Trash,
+  /// because the book is no longer licensed to this device.
+  func returnLoan(_ id: UUID) {
+    guard let book = books.first(where: { $0.id == id }), let loanID = book.loanID,
+      returningBookIDs.insert(id).inserted
+    else { return }
+    Task {
+      defer { returningBookIDs.remove(id) }
+      do {
+        try await returnLoanOperation(loanID)
+        Log.app.notice("Returned a loan")
+        withAnimation(Motion.easeOut(0.2)) { trashBook(id) }
+      } catch {
+        let failure = ErrorPresentation.from(error)
+        errorPresentation = ErrorPresentation(
+          title: "Could not return “\(book.title)”", summary: failure.summary,
+          detail: failure.detail)
+      }
+    }
   }
 
   func markBookLanded(_ id: UUID) {
@@ -304,8 +359,7 @@ final class ConversionModel {
     let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !cleanTitle.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
     let cleanAuthor = author?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let book = books[index]
-    var coverPath = book.coverPath
+    var book = books[index]
     switch cover {
     case .keep:
       break
@@ -318,16 +372,15 @@ final class ConversionModel {
         return
       }
       Self.deleteCover(book.coverPath)
-      coverPath = saved
+      book.coverPath = saved
     case .remove:
       Self.deleteCover(book.coverPath)
-      coverPath = nil
+      book.coverPath = nil
     }
-    books[index] = BookRecord(
-      id: book.id, title: cleanTitle,
-      author: cleanAuthor?.isEmpty == true ? nil : cleanAuthor,
-      filePath: book.filePath, format: book.format, coverPath: coverPath,
-      completedAt: book.completedAt, edited: true, acsmFingerprint: book.acsmFingerprint)
+    book.title = cleanTitle
+    book.author = cleanAuthor?.isEmpty == true ? nil : cleanAuthor
+    book.edited = true
+    books[index] = book
     persistBooks()
   }
 
@@ -521,7 +574,8 @@ final class ConversionModel {
       format: result.format,
       coverPath: Self.saveCover(result.coverData, id: id),
       completedAt: Date(),
-      acsmFingerprint: fingerprint
+      acsmFingerprint: fingerprint,
+      loan: result.loan
     )
     books.removeAll { $0.filePath == record.filePath }
     books.insert(record, at: 0)
