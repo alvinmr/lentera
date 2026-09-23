@@ -177,6 +177,8 @@ final class ConversionModel {
   var errorPresentation: ErrorPresentation?
   /// Loans that are being returned to the provider now.
   var returningBookIDs: Set<UUID> = []
+  /// Set when the provider rate limits a conversion. Retries before this time can extend the limit.
+  var rateLimitedUntil: Date?
 
   var waitingCount: Int { queue.filter(\.isWaiting).count }
   var succeededCount: Int { queue.filter(\.isDone).count }
@@ -527,9 +529,22 @@ final class ConversionModel {
           batchCompleted += 1
           batchFailed += 1
           Log.conversion.error("Conversion failed: \(String(describing: error), privacy: .private)")
-          if let current = queue.firstIndex(where: { $0.id == id }) {
-            queue[current].state = .failed(ErrorPresentation.from(error))
+          var failure = ErrorPresentation.from(error)
+          let rateLimited = FriendlyError.isRateLimited(error)
+          if rateLimited {
+            let retryAt = Date().addingTimeInterval(FriendlyError.rateLimitCooldown)
+            rateLimitedUntil = retryAt
+            failure = ErrorPresentation(
+              title: failure.title,
+              summary: FriendlyError.rateLimitMessage(
+                retryAt: retryAt, acsmExpiration: queue[index].info?.expiration),
+              detail: failure.detail)
           }
+          if let current = queue.firstIndex(where: { $0.id == id }) {
+            queue[current].state = .failed(failure)
+          }
+          // The next files would hit the same limit and extend it, so they stay in the queue.
+          if rateLimited { break }
         }
       }
     }

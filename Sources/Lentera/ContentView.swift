@@ -116,6 +116,7 @@ struct ContentView: View {
           if !model.queue.isEmpty {
             queueList.transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
           }
+          rateLimitNotice
           status
         }
         .animation(Motion.easeOut(0.25), value: model.queue.map(\.id))
@@ -194,6 +195,30 @@ struct ContentView: View {
       }
     }
     .lenteraSurface()
+  }
+
+  /// Shown until the rate limit cooldown ends, so a quick retry does not extend the limit.
+  private var rateLimitNotice: some View {
+    // The context date of an explicit schedule is the next entry, so compare with `.now`.
+    TimelineView(.explicit(model.rateLimitedUntil.map { [$0] } ?? [])) { _ in
+      if let until = model.rateLimitedUntil, until > .now {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+          Image(systemName: "clock.badge.exclamationmark")
+            .foregroundStyle(.orange)
+            .accessibilityHidden(true)
+          Text(
+            "The book provider is limiting requests. Wait until \(until.formatted(date: .omitted, time: .shortened)) before you convert or retry."
+          )
+          .fixedSize(horizontal: false, vertical: true)
+          Spacer(minLength: 0)
+        }
+        .font(.callout)
+        .padding(12)
+        .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+        .transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
+      }
+    }
+    .animation(Motion.easeOut(0.25), value: model.rateLimitedUntil)
   }
 
   private enum StatusPhase {

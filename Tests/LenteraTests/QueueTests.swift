@@ -1,4 +1,5 @@
 import Foundation
+import os
 import Testing
 
 @testable import Lentera
@@ -215,4 +216,36 @@ private func waitForBatch(_ model: ConversionModel) async throws {
 
   model.markBookLanded(model.books[0].id)
   #expect(model.recentlyAddedBookIDs == [model.books[1].id])
+}
+
+@MainActor @Test func rateLimitStopsTheBatchAndKeepsTheRestWaiting() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  // Expires in 5 minutes, before the 15-minute cooldown ends.
+  let soon = ISO8601DateFormatter().string(from: Date().addingTimeInterval(300))
+  let first = directory.appendingPathComponent("first.acsm")
+  try Data(
+    """
+    <fulfillmentToken fulfillmentType="buy" xmlns="http://ns.adobe.com/adept">
+    <expiration>\(soon)</expiration></fulfillmentToken>
+    """.utf8
+  ).write(to: first)
+
+  let attempts = OSAllocatedUnfairLock(initialState: 0)
+  let model = ConversionModel(
+    books: [],
+    convert: { _, _, _ in
+      attempts.withLock { $0 += 1 }
+      throw ConversionError.commandFailed("acsmdownloader", "Message : HTTP Error code 429")
+    })
+  model.addFiles([first, acsm("second.acsm"), acsm("third.acsm")])
+  model.convert()
+  try await waitForBatch(model)
+
+  #expect(attempts.withLock { $0 } == 1)
+  #expect(model.queue.map { label($0.state) } == ["failed", "waiting", "waiting"])
+  #expect(model.queue[0].failure?.summary.contains("download a new ACSM") == true)
+  let until = try #require(model.rateLimitedUntil)
+  #expect(until > Date().addingTimeInterval(14 * 60))
 }

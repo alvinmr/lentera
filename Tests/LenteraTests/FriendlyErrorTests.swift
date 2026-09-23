@@ -38,3 +38,24 @@ import Testing
   #expect(decoded.filePath == record.filePath)
   #expect(decoded.format == .epub)
 }
+
+@Test func rateLimitMessageAsksForANewACSMWhenItExpiresFirst() {
+  let retryAt = Date(timeIntervalSince1970: 2_000_000_000)
+  let expiresFirst = FriendlyError.rateLimitMessage(
+    retryAt: retryAt, acsmExpiration: retryAt.addingTimeInterval(-60))
+  #expect(expiresFirst.contains("download a new ACSM"))
+
+  let stillValid = FriendlyError.rateLimitMessage(
+    retryAt: retryAt, acsmExpiration: retryAt.addingTimeInterval(3600))
+  #expect(stillValid.contains("try once"))
+  #expect(!stillValid.contains("new ACSM"))
+  #expect(FriendlyError.rateLimitMessage(retryAt: retryAt, acsmExpiration: nil).contains("try once"))
+}
+
+@Test func detectsRateLimitedConversions() {
+  #expect(FriendlyError.isRateLimited(
+    ConversionError.commandFailed("acsmdownloader", "Message : HTTP Error code 429")))
+  #expect(!FriendlyError.isRateLimited(
+    ConversionError.commandFailed("acsmdownloader", "HTTP Error code 500")))
+  #expect(!FriendlyError.isRateLimited(ConversionError.invalidInput))
+}
