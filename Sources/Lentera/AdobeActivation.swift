@@ -34,7 +34,8 @@ nonisolated enum AdobeActivation {
 
   static func isActivated(in directory: URL = directory) -> Bool {
     requiredFiles.allSatisfy {
-      FileManager.default.fileExists(atPath: directory.appendingPathComponent($0).path)
+      let values = try? directory.appendingPathComponent($0).resourceValues(forKeys: [.isRegularFileKey])
+      return values?.isRegularFile == true
     }
   }
 
@@ -95,15 +96,21 @@ nonisolated enum AdobeActivation {
       != directory.resolvingSymlinksInPath().standardizedFileURL.path
     else { return }
 
+    // Copy next to the destination first, so a failed copy never leaves a partial activation.
     let fileManager = FileManager.default
+    let parent = directory.deletingLastPathComponent()
+    try fileManager.createDirectory(at: parent, withIntermediateDirectories: true)
+    let replacement = parent.appendingPathComponent(".adept-import-\(UUID().uuidString)", isDirectory: true)
+    defer { try? fileManager.removeItem(at: replacement) }
+    try fileManager.createDirectory(at: replacement, withIntermediateDirectories: false)
+    for name in requiredFiles {
+      try fileManager.copyItem(
+        at: found.appendingPathComponent(name), to: replacement.appendingPathComponent(name))
+    }
     if fileManager.fileExists(atPath: directory.path) {
       try fileManager.trashItem(at: directory, resultingItemURL: nil)
     }
-    try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-    for name in requiredFiles {
-      try fileManager.copyItem(
-        at: found.appendingPathComponent(name), to: directory.appendingPathComponent(name))
-    }
+    try fileManager.moveItem(at: replacement, to: directory)
   }
 
   /// Moves the activation to the Trash. The next conversion activates a new device.

@@ -58,3 +58,21 @@ private func makeActivation(in directory: URL, username: String) throws {
     try await AdobeActivation.importBackup(from: root, into: root.appendingPathComponent("target"))
   }
 }
+
+@Test func importRejectsBackupsWhoseEntriesAreNotFiles() async throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let backup = root.appendingPathComponent("backup")
+  for name in AdobeActivation.requiredFiles {
+    try FileManager.default.createDirectory(
+      at: backup.appendingPathComponent(name), withIntermediateDirectories: true)
+  }
+  let target = root.appendingPathComponent("target")
+  try makeActivation(in: target, username: "")
+  let before = try Data(contentsOf: target.appendingPathComponent("devicesalt"))
+
+  await #expect(throws: AdobeActivation.ActivationError.self) {
+    try await AdobeActivation.importBackup(from: backup, into: target)
+  }
+  #expect(try Data(contentsOf: target.appendingPathComponent("devicesalt")) == before)
+}

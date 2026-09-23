@@ -305,10 +305,13 @@ private struct QueueRow: View {
             .font(.caption).foregroundStyle(.secondary)
             .lineLimit(1)
         }
-        Text(statusText)
-          .font(.caption)
-          .foregroundStyle(statusColor)
-          .lineLimit(2)
+        // Redraws at the download deadline, so the row turns orange without other changes.
+        TimelineView(.explicit(item.info?.expiration.map { [$0] } ?? [])) { context in
+          Text(statusText(at: context.date))
+            .font(.caption)
+            .foregroundStyle(statusColor(at: context.date))
+            .lineLimit(2)
+        }
       }
       Spacer(minLength: 8)
       if let failure = item.failure {
@@ -375,19 +378,21 @@ private struct QueueRow: View {
     }
   }
 
-  private var isExpired: Bool { item.isWaiting && item.info?.isExpired() == true }
-
-  private var statusColor: Color {
-    if item.isFailed { return .red }
-    return isExpired ? .orange : .secondary
+  private func isExpired(at now: Date) -> Bool {
+    item.isWaiting && item.info?.isExpired(at: now) == true
   }
 
-  private var statusText: String {
+  private func statusColor(at now: Date) -> Color {
+    if item.isFailed { return .red }
+    return isExpired(at: now) ? .orange : .secondary
+  }
+
+  private func statusText(at now: Date) -> String {
     switch item.state {
     case .waiting:
       guard let expiration = item.info?.expiration else { return "Waiting" }
       let date = expiration.formatted(date: .abbreviated, time: .omitted)
-      return isExpired
+      return isExpired(at: now)
         ? "License expired on \(date). Download a new ACSM if this fails."
         : "Waiting · Download before \(date)"
     case .active(let progress, let message):

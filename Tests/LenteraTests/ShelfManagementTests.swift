@@ -94,3 +94,17 @@ private func makeBook(
   #expect(model.errorPresentation != nil)
   #expect(model.books.first?.coverPath == nil)
 }
+
+@MainActor @Test func refreshClearsABrokenCoverWhenTheBookHasNone() async throws {
+  let broken = FileManager.default.temporaryDirectory.appendingPathComponent("\(UUID().uuidString).jpg")
+  try Data("not an image".utf8).write(to: broken)
+  let book = BookRecord(
+    id: UUID(), title: "Book", author: nil, filePath: "/tmp/\(UUID().uuidString).pdf",
+    format: .pdf, coverPath: broken.path, completedAt: Date(), acsmFingerprint: "abc")
+  let model = ConversionModel(books: [book])
+
+  await model.refreshBookMetadata()
+  #expect(model.books.first?.coverPath == nil)
+  #expect(model.books.first?.acsmFingerprint == "abc")
+  #expect(!FileManager.default.fileExists(atPath: broken.path))
+}

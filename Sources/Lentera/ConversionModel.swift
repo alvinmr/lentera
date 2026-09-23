@@ -239,9 +239,10 @@ final class ConversionModel {
       let metadata = await BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
       guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
       var coverPath = book.coverPath
-      if !hasCover, let saved = Self.saveCover(metadata.coverData, id: book.id) {
+      if !hasCover {
+        // Drop a missing or broken cover even when the book has none to replace it.
+        coverPath = Self.saveCover(metadata.coverData, id: book.id)
         Self.deleteCover(book.coverPath)
-        coverPath = saved
       }
       self.books[index] = BookRecord(
         id: book.id, title: metadata.title, author: book.author ?? metadata.author,
