@@ -78,9 +78,12 @@ struct ContentView: View {
           }
           .padding(14)
           .lenteraSurface()
-          if !model.queue.isEmpty { queueList }
+          if !model.queue.isEmpty {
+            queueList.transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
+          }
           status
         }
+        .animation(Motion.easeOut(0.25), value: model.queue.map(\.id))
         Text("The format follows the book from the provider. Files are saved on this Mac.")
           .font(.callout).foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
@@ -119,16 +122,39 @@ struct ContentView: View {
   private var queueList: some View {
     VStack(spacing: 0) {
       ForEach(model.queue) { item in
-        QueueRow(item: item, model: model)
-        if item.id != model.queue.last?.id {
-          Divider().padding(.leading, 44)
+        VStack(spacing: 0) {
+          QueueRow(item: item, model: model)
+          if item.id != model.queue.last?.id {
+            Divider().padding(.leading, 44)
+          }
         }
+        .transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
       }
     }
     .lenteraSurface()
   }
 
-  @ViewBuilder private var status: some View {
+  private enum StatusPhase {
+    case converting, ready, succeeded, nothingConverted, idle
+  }
+
+  private var statusPhase: StatusPhase {
+    if model.isConverting { return .converting }
+    if model.waitingCount > 0 { return .ready }
+    if model.succeededCount > 0 { return .succeeded }
+    return model.queue.isEmpty ? .idle : .nothingConverted
+  }
+
+  private var status: some View {
+    ZStack {
+      statusContent
+        .id(statusPhase)
+        .transition(Motion.appear(reduceMotion: reduceMotion))
+    }
+    .animation(Motion.easeOut(0.3), value: statusPhase)
+  }
+
+  @ViewBuilder private var statusContent: some View {
     if model.isConverting {
       VStack(spacing: 12) {
         ProgressView(value: model.overallProgress)
@@ -151,9 +177,7 @@ struct ContentView: View {
       }
     } else if model.succeededCount > 0 {
       VStack(spacing: 12) {
-        Label(model.succeededCount == 1 ? "1 book ready to read" : "\(model.succeededCount) books ready to read",
-              systemImage: "checkmark.circle.fill")
-          .font(.headline).foregroundStyle(.green)
+        SuccessLabel(count: model.succeededCount)
         HStack {
           Button("Reveal All in Finder", action: revealResults)
             .lenteraButton()
@@ -307,18 +331,26 @@ private struct QueueRow: View {
     }
   }
 
-  @ViewBuilder private var icon: some View {
+  private var icon: some View {
+    ZStack {
+      if item.isActive {
+        ProgressView().controlSize(.small).transition(.opacity)
+      } else {
+        Image(systemName: symbol.name)
+          .foregroundStyle(symbol.color)
+          .contentTransition(.symbolEffect(.replace))
+          .transition(.opacity)
+      }
+    }
+    .animation(Motion.easeOut(0.15), value: item.isActive ? "spinner" : symbol.name)
+  }
+
+  private var symbol: (name: String, color: Color) {
     switch item.state {
-    case .waiting:
-      Image(systemName: "circle.dashed").foregroundStyle(.secondary)
-    case .active:
-      ProgressView().controlSize(.small)
-    case .done:
-      Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-    case .failed:
-      Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
-    case .cancelled:
-      Image(systemName: "minus.circle").foregroundStyle(.secondary)
+    case .waiting, .active: ("circle.dashed", .secondary)
+    case .done: ("checkmark.circle.fill", .green)
+    case .failed: ("xmark.octagon.fill", .red)
+    case .cancelled: ("minus.circle", .secondary)
     }
   }
 
@@ -335,6 +367,22 @@ private struct QueueRow: View {
     case .cancelled:
       return "Canceled"
     }
+  }
+}
+
+private struct SuccessLabel: View {
+  let count: Int
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var bounce = false
+
+  var body: some View {
+    Label {
+      Text(count == 1 ? "1 book ready to read" : "\(count) books ready to read")
+    } icon: {
+      Image(systemName: "checkmark.circle.fill").symbolEffect(.bounce, value: bounce)
+    }
+    .font(.headline).foregroundStyle(.green)
+    .onAppear { if !reduceMotion { bounce.toggle() } }
   }
 }
 
