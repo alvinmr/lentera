@@ -306,10 +306,11 @@ private struct QueueRow: View {
             .lineLimit(1)
         }
         // Redraws at the download deadline, so the row turns orange without other changes.
-        TimelineView(.explicit(item.info?.expiration.map { [$0] } ?? [])) { context in
-          Text(statusText(at: context.date))
+        // The context date of an explicit schedule is the next entry, not the current time.
+        TimelineView(.explicit(item.info?.expiration.map { [$0] } ?? [])) { _ in
+          Text(statusText(at: .now))
             .font(.caption)
-            .foregroundStyle(statusColor(at: context.date))
+            .foregroundStyle(statusColor(at: .now))
             .lineLimit(2)
         }
       }
