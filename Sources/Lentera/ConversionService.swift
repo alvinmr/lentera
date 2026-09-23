@@ -201,8 +201,12 @@ nonisolated struct ConversionService: Sendable {
   }
 
   func safeBaseName(_ name: String) -> String {
-    let invalid = CharacterSet.controlCharacters.union(CharacterSet(charactersIn: "/\\:"))
-    let cleaned = name.components(separatedBy: invalid).joined(separator: " ")
+    // Titles can hold line or paragraph separators (U+2028, U+2029) that are not control characters.
+    let invalid = CharacterSet.controlCharacters.union(.newlines)
+      .union(CharacterSet(charactersIn: "/\\:"))
+    let cleaned = name.components(separatedBy: invalid)
+      .flatMap { $0.split(separator: " ", omittingEmptySubsequences: true) }
+      .joined(separator: " ")
       .trimmingCharacters(in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: ".")))
     return String(cleaned.prefix(120)).isEmpty ? "Book" : String(cleaned.prefix(120))
   }
