@@ -22,6 +22,7 @@
 #include <time.h>
 #include <vector>
 #include <ctime>
+#include <cctype>
 
 #include <uPDFParser.h>
 
@@ -73,11 +74,46 @@ namespace gourou
 
     // function to parse a date or time string.
     // https://www.geeksforgeeks.org/cpp/date-and-time-parsing-in-cpp/
+    // Lentera: ACSM timestamps carry an offset, such as 2026-09-23T08:33:11-07:00.
+    // mktime alone reads them as local time, so apply the offset and convert as UTC.
+    // Timestamps without an offset are still read as local time.
     static time_t parseDateTime(const char* datetimeString, const char* format)
     {
-        struct tm tmStruct;
-        strptime(datetimeString, format, &tmStruct);
-        return mktime(&tmStruct);
+        struct tm tmStruct = {};
+        const char* rest = strptime(datetimeString, format, &tmStruct);
+        if (!rest)
+            return (time_t)-1;
+
+        // Skip fractional seconds
+        if (*rest == '.')
+            for (rest++; isdigit((unsigned char)*rest); rest++);
+
+        if (*rest == 'Z' || *rest == 'z')
+            return timegm(&tmStruct);
+
+        if (*rest != '+' && *rest != '-')
+        {
+            tmStruct.tm_isdst = -1;
+            return mktime(&tmStruct);
+        }
+
+        int sign = (*rest == '-') ? -1 : 1;
+        rest++;
+        int digits[4] = {0, 0, 0, 0};
+        int count = 0;
+        for (; *rest && count < 4; rest++)
+        {
+            if (*rest == ':')
+                continue;
+            if (!isdigit((unsigned char)*rest))
+                break;
+            digits[count++] = *rest - '0';
+        }
+        if (count != 2 && count != 4)
+            return (time_t)-1;
+
+        long offset = (digits[0] * 10 + digits[1]) * 3600L + (digits[2] * 10 + digits[3]) * 60L;
+        return timegm(&tmStruct) - sign * offset;
     }
 
     DRMProcessor* DRMProcessor::createDRMProcessor(DRMProcessorClient* client, bool randomSerial, std::string dirName,
@@ -524,7 +560,7 @@ namespace gourou
         {
             time_t expirationTime = parseDateTime(expiration.c_str(), "%Y-%m-%dT%H:%M:%S");
 
-            if (time(NULL) > expirationTime)
+            if (expirationTime != (time_t)-1 && time(NULL) > expirationTime)
                 GOUROU_LOG(WARN, "WARNING: ACSM file expired (" << expiration << "), It may not work.");
         }
 
