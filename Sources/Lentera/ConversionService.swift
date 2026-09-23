@@ -18,6 +18,7 @@ nonisolated enum ConversionError: LocalizedError {
   case invalidInput
   case commandFailed(String, String)
   case outputMissing
+  case loanMissing
 
   var errorDescription: String? {
     switch self {
@@ -30,6 +31,8 @@ nonisolated enum ConversionError: LocalizedError {
       return FriendlyError.message(command: command, output: output)
     case .outputMissing:
       return "The download finished, but the book file was not found."
+    case .loanMissing:
+      return "Lentera cannot find the loan for this book. It was possibly returned already."
     }
   }
 }
@@ -88,6 +91,7 @@ nonisolated struct ConversionService: Sendable {
       currentDirectory: work
     )
 
+    let loan = LoanStore.loan(fromDownloaderOutput: downloadOutput)
     let encrypted = try downloadedBook(in: work, commandOutput: downloadOutput)
     let nativeExtension = encrypted.pathExtension.lowercased()
     guard let format = OutputFormat(rawValue: nativeExtension.uppercased()) else {
@@ -122,8 +126,26 @@ nonisolated struct ConversionService: Sendable {
       title: metadata.title,
       author: metadata.author,
       format: format,
-      coverData: metadata.coverData
+      coverData: metadata.coverData,
+      loan: loan
     )
+  }
+
+  /// Returns a library loan to its provider. adept_loan_mgt exits with 0 even when it
+  /// cannot find the loan, so the return succeeded only when the loan token is gone.
+  @concurrent func returnLoan(id: String) async throws {
+    let adept = try adeptDirectory ?? persistentAdeptDirectory()
+    let token = LoanStore.file(for: id, in: adept)
+    guard FileManager.default.fileExists(atPath: token.path) else {
+      throw ConversionError.loanMissing
+    }
+    let tool = try tools?.loans ?? ToolLocator.tool("adept_loan_mgt")
+    // The long --return option takes no value in adept_loan_mgt, so use -r.
+    let output = try await run(
+      tool, ["--adept-directory", adept.path, "-r", id], currentDirectory: adept)
+    guard !FileManager.default.fileExists(atPath: token.path) else {
+      throw ConversionError.commandFailed(tool.lastPathComponent, output)
+    }
   }
 
   private func installActivation(from staging: URL, to adept: URL) throws {
@@ -253,16 +275,18 @@ nonisolated struct ToolLocator {
   let activate: URL
   let downloader: URL
   let remove: URL
+  var loans: URL? = nil
 
   static func resolve() throws -> ToolLocator {
     ToolLocator(
       activate: try tool("adept_activate"),
       downloader: try tool("acsmdownloader"),
-      remove: try tool("adept_remove")
+      remove: try tool("adept_remove"),
+      loans: try? tool("adept_loan_mgt")
     )
   }
 
-  private static func tool(_ name: String) throws -> URL {
+  static func tool(_ name: String) throws -> URL {
     let bundled = resourceBundle.url(forResource: name, withExtension: nil)
     if let bundled, FileManager.default.isExecutableFile(atPath: bundled.path) { return bundled }
     guard let external = firstExisting(["/opt/homebrew/bin/\(name)", "/usr/local/bin/\(name)"])

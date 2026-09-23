@@ -46,7 +46,8 @@ if [[ -n "$SPARKLE_SOURCE" ]]; then
 fi
 
 codesign --force --sign - "$LIB"/*.dylib "$LIB"/ossl-modules/*.dylib(N) \
-  "$BUNDLE"/acsmdownloader "$BUNDLE"/adept_activate "$BUNDLE"/adept_remove "$APP/Contents/MacOS/Lentera"
+  "$BUNDLE"/acsmdownloader "$BUNDLE"/adept_activate "$BUNDLE"/adept_remove "$BUNDLE"/adept_loan_mgt \
+  "$APP/Contents/MacOS/Lentera"
 if [[ -d "$APP/Contents/Frameworks/Sparkle.framework" ]]; then
   SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
   codesign --force --sign - "$SPARKLE/Versions/B/Autoupdate"

@@ -76,3 +76,19 @@ private func makeActivation(in directory: URL, username: String) throws {
   }
   #expect(try Data(contentsOf: target.appendingPathComponent("devicesalt")) == before)
 }
+
+@Test func loansTravelWithTheActivation() async throws {
+  let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  defer { try? FileManager.default.removeItem(at: root) }
+  let source = root.appendingPathComponent("source")
+  let target = root.appendingPathComponent("target")
+  let archive = root.appendingPathComponent("backup.zip")
+  try makeActivation(in: source, username: "")
+  try FileManager.default.createDirectory(
+    at: source.appendingPathComponent("loans"), withIntermediateDirectories: true)
+  try Data("<loanToken/>".utf8).write(to: source.appendingPathComponent("loans/abc.xml"))
+
+  try await AdobeActivation.export(from: source, to: archive)
+  try await AdobeActivation.importBackup(from: archive, into: target)
+  #expect(FileManager.default.fileExists(atPath: target.appendingPathComponent("loans/abc.xml").path))
+}

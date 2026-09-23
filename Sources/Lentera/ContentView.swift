@@ -1,4 +1,5 @@
 import AppKit
+import QuickLook
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -6,6 +7,12 @@ struct ContentView: View {
   @Bindable var model: ConversionModel
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @State private var editingBook: BookRecord?
+  @State private var returningBook: BookRecord?
+  @State private var quickLookURL: URL?
+  @State private var hoveredBookID: UUID?
+  @State private var selectedBookIDs: Set<UUID> = []
+  @AppStorage("shelfLayout") private var shelfLayout = ShelfLayout.shelf
+  @AppStorage("shelfCoverScale") private var coverScale = 1.0
 
   var body: some View {
     NavigationSplitView {
@@ -41,16 +48,50 @@ struct ContentView: View {
         }
       }
     }
+    .confirmationDialog(
+      "Return “\(returningBook?.title ?? "")”?", isPresented: returnDialogBinding,
+      presenting: returningBook
+    ) { book in
+      Button("Return Loan", role: .destructive) { model.returnLoan(book.id) }
+    } message: { _ in
+      Text("Lentera returns the loan to the provider and moves the book file to the Trash.")
+    }
+    .quickLookPreview($quickLookURL)
+  }
+
+  private var returnDialogBinding: Binding<Bool> {
+    Binding(get: { returningBook != nil }, set: { if !$0 { returningBook = nil } })
+  }
+
+  private var bookActions: BookActions {
+    BookActions(
+      edit: { editingBook = $0 },
+      returnLoan: { returningBook = $0 },
+      quickLook: { quickLookURL = $0.fileURL })
+  }
+
+  /// Space opens Quick Look for the hovered book on the shelf, or the selected book in the list.
+  private func toggleQuickLook() -> Bool {
+    guard model.page == .bookshelf, editingBook == nil else { return false }
+    if quickLookURL != nil {
+      quickLookURL = nil
+      return true
+    }
+    let target: UUID? =
+      shelfLayout == .shelf
+      ? hoveredBookID
+      : model.visibleBooks.first { selectedBookIDs.contains($0.id) }?.id
+    guard let target, let book = model.books.first(where: { $0.id == target }),
+      !model.missingBookIDs.contains(target)
+    else { return false }
+    quickLookURL = book.fileURL
+    return true
   }
 
   private var conversionPage: some View {
     ScrollView {
       VStack(spacing: 24) {
         VStack(spacing: 8) {
-          Image(systemName: "arrow.down.doc")
-            .font(.system(size: 38, weight: .light))
-            .foregroundStyle(.tint)
-            .accessibilityHidden(true)
           Text("From ACSM to your book")
             .font(.title2.weight(.semibold))
           Text("Download your book in EPUB or PDF from the provider.")
@@ -60,24 +101,15 @@ struct ContentView: View {
 
         VStack(spacing: 16) {
           dropZone
-          VStack(spacing: 12) {
-            HStack {
-              Text("Save to")
-              Spacer()
-              Label(model.destination?.lastPathComponent ?? "Downloads", systemImage: "folder")
-                .lineLimit(1).truncationMode(.middle)
-                .help(model.destination?.path ?? "Downloads folder")
-              Button("Change…", action: model.chooseDestination)
-                .disabled(model.isConverting)
-                .lenteraButton()
-            }
-            Divider()
-            HStack {
-              Text("Output format")
-              Spacer()
-              Text("Automatic (EPUB or PDF)")
-                .foregroundStyle(.secondary)
-            }
+          HStack {
+            Text("Save to")
+            Spacer()
+            Label(model.destination?.lastPathComponent ?? "Downloads", systemImage: "folder")
+              .lineLimit(1).truncationMode(.middle)
+              .help(model.destination?.path ?? "Downloads folder")
+            Button("Change…", action: model.chooseDestination)
+              .disabled(model.isConverting)
+              .lenteraButton()
           }
           .padding(14)
           .lenteraSurface()
@@ -87,7 +119,7 @@ struct ContentView: View {
           status
         }
         .animation(Motion.easeOut(0.25), value: model.queue.map(\.id))
-        Text("The format follows the book from the provider. Files are saved on this Mac.")
+        Text("The provider chooses EPUB or PDF. Files are saved on this Mac.")
           .font(.callout).foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
       }
@@ -97,21 +129,48 @@ struct ContentView: View {
     }
   }
 
-  private var dropZone: some View {
-    VStack(spacing: 12) {
-      Image(systemName: model.queue.isEmpty ? "doc.badge.plus" : "doc.on.doc")
-        .font(.system(size: 30, weight: .light)).foregroundStyle(.tint)
-        .accessibilityHidden(true)
-      Text(model.queue.isEmpty ? "Drag one or more ACSM files here" : "Drag ACSM files to add to the queue")
-        .font(.headline).lineLimit(2).truncationMode(.middle)
-        .multilineTextAlignment(.center)
-        .help("Files with the .acsm extension")
-      Button(model.queue.isEmpty ? "Choose Files…" : "Add Files…", action: model.chooseFiles)
-        .disabled(model.isConverting)
-        .lenteraButton()
+  /// Large while the queue is empty; one row once the queue is the focus of the page.
+  @ViewBuilder private var dropZoneContent: some View {
+    if model.queue.isEmpty {
+      VStack(spacing: 12) {
+        Image(systemName: "doc.badge.plus")
+          .font(.system(size: 34, weight: .light)).foregroundStyle(.tint)
+          .accessibilityHidden(true)
+        Text("Drag one or more ACSM files here")
+          .font(.headline)
+          .multilineTextAlignment(.center)
+          .help("Files with the .acsm extension")
+        Button("Choose Files…", action: model.chooseFiles)
+          .disabled(model.isConverting)
+          .lenteraButton()
+      }
+      .padding(24)
+      .frame(maxWidth: .infinity, minHeight: 170)
+    } else {
+      HStack(spacing: 12) {
+        Image(systemName: "doc.badge.plus")
+          .font(.system(size: 20, weight: .light)).foregroundStyle(.tint)
+          .accessibilityHidden(true)
+        Text("Drag more ACSM files here")
+          .foregroundStyle(.secondary)
+          .help("Files with the .acsm extension")
+        Spacer()
+        Button("Add Files…", action: model.chooseFiles)
+          .disabled(model.isConverting)
+          .lenteraButton()
+      }
+      .padding(.horizontal, 16).padding(.vertical, 12)
+      .frame(maxWidth: .infinity)
     }
-    .padding(24)
-    .frame(maxWidth: .infinity, minHeight: 154)
+  }
+
+  private var dropZone: some View {
+    ZStack {
+      dropZoneContent
+        .id(model.queue.isEmpty)
+        .transition(.opacity)
+    }
+    .animation(Motion.easeOut(0.25), value: model.queue.isEmpty)
     .lenteraSurface()
     .overlay {
       RoundedRectangle(cornerRadius: 12)
@@ -215,10 +274,14 @@ struct ContentView: View {
         Text(visibleBooks.count == 1 ? "1 book" : "\(visibleBooks.count) books")
           .foregroundStyle(.secondary)
         Spacer()
+        if shelfLayout == .shelf {
+          coverSizeSlider
+            .transition(.opacity)
+        }
         Picker("Filter format", selection: $model.shelfFilter) {
           ForEach(ShelfFilter.allCases, id: \.self) { Text($0.rawValue).tag($0) }
         }
-        .pickerStyle(.segmented).frame(width: 220)
+        .pickerStyle(.segmented).frame(width: 180)
         .labelsHidden()
         .accessibilityLabel("Filter by format")
         Menu {
@@ -233,7 +296,18 @@ struct ContentView: View {
         .accessibilityLabel("Sort books")
         .accessibilityValue(model.shelfSort.rawValue)
         .help("Sort: \(model.shelfSort.rawValue)")
+        Picker("Layout", selection: $shelfLayout) {
+          ForEach(ShelfLayout.allCases, id: \.self) { layout in
+            Label(layout.label, systemImage: layout.symbol).tag(layout)
+          }
+        }
+        .pickerStyle(.segmented)
+        .labelStyle(.iconOnly)
+        .labelsHidden()
+        .fixedSize()
+        .help("Show books on a shelf or in a list")
       }
+      .animation(Motion.easeOut(0.2), value: shelfLayout)
       .padding(24)
       if !model.missingBookIDs.isEmpty {
         missingFilesNotice.transition(
@@ -255,14 +329,35 @@ struct ContentView: View {
           }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if shelfLayout == .shelf {
+        BookshelfGrid(
+          books: visibleBooks, model: model, actions: bookActions, hoveredBookID: $hoveredBookID
+        )
+        .environment(\.shelfMetrics, ShelfMetrics(scale: coverScale))
       } else {
-        BookshelfGrid(books: visibleBooks, model: model, onEdit: { editingBook = $0 })
+        BookshelfList(
+          books: visibleBooks, model: model, actions: bookActions, selection: $selectedBookIDs)
       }
     }
+    .modifier(SpaceKeyMonitor(action: toggleQuickLook))
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     .background(Color.shelfWall)
     .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Search title or author")
     .task { model.refreshMissingFiles() }
+  }
+
+  private var coverSizeSlider: some View {
+    HStack(spacing: 6) {
+      Image(systemName: "book.closed").imageScale(.small)
+      Slider(value: $coverScale, in: ShelfMetrics.scaleRange)
+        .controlSize(.small)
+        .frame(width: 90)
+      Image(systemName: "book.closed").imageScale(.large)
+    }
+    .foregroundStyle(.secondary)
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel("Cover size")
+    .help("Cover size")
   }
 
   private var missingFilesNotice: some View {
@@ -306,10 +401,11 @@ private struct QueueRow: View {
             .lineLimit(1)
         }
         // Redraws at the download deadline, so the row turns orange without other changes.
-        TimelineView(.explicit(item.info?.expiration.map { [$0] } ?? [])) { context in
-          Text(statusText(at: context.date))
+        // The context date of an explicit schedule is the next entry, not the current time.
+        TimelineView(.explicit(item.info?.expiration.map { [$0] } ?? [])) { _ in
+          Text(statusText(at: .now))
             .font(.caption)
-            .foregroundStyle(statusColor(at: context.date))
+            .foregroundStyle(statusColor(at: .now))
             .lineLimit(2)
         }
       }
@@ -404,17 +500,6 @@ private struct QueueRow: View {
     case .cancelled:
       return "Canceled"
     }
-  }
-}
-
-private struct Tag: View {
-  let text: String
-
-  var body: some View {
-    Text(text)
-      .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
-      .padding(.horizontal, 6).padding(.vertical, 1)
-      .background(.quaternary, in: Capsule())
   }
 }
 

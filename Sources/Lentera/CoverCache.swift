@@ -3,8 +3,8 @@ import ImageIO
 
 /// Keeps decoded, shelf-sized covers in memory so hovering and scrolling never read the disk.
 enum CoverCache {
-  /// Sharp at 2x on the shelf and in the details editor.
-  nonisolated static let maxPixelSize = 480
+  /// Sharp at 2x in the details editor and on the shelf at its largest cover size.
+  nonisolated static let maxPixelSize = 540
 
   private static let images: NSCache<NSString, NSImage> = {
     let cache = NSCache<NSString, NSImage>()

@@ -52,3 +52,28 @@ enum Motion {
     reduceMotion ? .opacity : .opacity.combined(with: .scale(scale: scale, anchor: anchor))
   }
 }
+
+/// A small capsule label, such as a book's format.
+struct Tag: View {
+  private let content: Text
+  private let tint: Color?
+
+  init(text: String, tint: Color? = nil) {
+    content = Text(text)
+    self.tint = tint
+  }
+
+  init(symbol: String, tint: Color? = nil) {
+    content = Text(Image(systemName: symbol))
+    self.tint = tint
+  }
+
+  var body: some View {
+    content
+      .font(.caption2.weight(.semibold))
+      .foregroundStyle(tint ?? .secondary)
+      .padding(.horizontal, 6).padding(.vertical, 1)
+      .background(tint.map { AnyShapeStyle($0.opacity(0.18)) } ?? AnyShapeStyle(.quaternary), in: Capsule())
+      .lineLimit(1)
+  }
+}
