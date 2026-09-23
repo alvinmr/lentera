@@ -355,6 +355,7 @@ private struct BookCard: View {
   let model: ConversionModel
   let onEdit: () -> Void
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @AppStorage("kindleEmail") private var kindleEmail = ""
 
   var body: some View {
     Button { model.openBook(book) } label: {
@@ -394,6 +395,7 @@ private struct BookCard: View {
     .contextMenu {
       Button("Open") { model.openBook(book) }.disabled(isMissing)
       Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) }
+      Button("Send to Kindle…") { model.sendToKindle(book, address: kindleEmail) }.disabled(isMissing)
       Button("Edit Details…", action: onEdit)
       Divider()
       Button("Remove from Shelf") { model.removeBook(book.id) }

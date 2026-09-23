@@ -5,6 +5,7 @@ struct SettingsView: View {
   @Bindable var model: ConversionModel
   let updater: SPUUpdater
   @AppStorage("notifyOnCompletion") private var notifyOnCompletion = true
+  @AppStorage("kindleEmail") private var kindleEmail = ""
 
   var body: some View {
     Form {
@@ -18,6 +19,14 @@ struct SettingsView: View {
             .help(model.destination?.path ?? "Downloads folder")
           Button("Change…", action: model.chooseDestination)
         }
+      }
+      Section {
+        TextField("Kindle email", text: $kindleEmail, prompt: Text("name@kindle.com"))
+      } header: {
+        Text("Send to Kindle")
+      } footer: {
+        Text("Add the email address of your Mail account to the Approved Personal Document E-mail List on Amazon.")
+          .font(.caption).foregroundStyle(.secondary)
       }
       Section("Updates") {
         Toggle(
