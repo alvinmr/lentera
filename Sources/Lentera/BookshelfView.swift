@@ -190,19 +190,58 @@ private struct BookOnShelf: View {
   }
 }
 
+/// Loads a book's cover through `CoverCache`, so the shelf never decodes images while it renders.
 private struct BookCover: View {
   let book: BookRecord
+  @State private var loaded: (path: String, image: NSImage?)?
+
+  private var image: NSImage? {
+    guard let path = book.coverPath else { return nil }
+    if let loaded, loaded.path == path { return loaded.image }
+    return CoverCache.cached(path)
+  }
+
+  private var isLoading: Bool {
+    guard let path = book.coverPath else { return false }
+    return loaded?.path != path && CoverCache.cached(path) == nil
+  }
 
   var body: some View {
     Group {
-      if let url = book.coverURL, let image = NSImage(contentsOf: url) {
-        Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
-          .frame(maxWidth: ShelfMetrics.bookWidth, maxHeight: ShelfMetrics.coverHeight)
+      if isLoading {
+        Color.clear.frame(width: ShelfMetrics.bookWidth - 6, height: ShelfMetrics.coverHeight - 4)
       } else {
-        ClothCover(title: book.title, author: book.author)
+        CoverArt(image: image, title: book.title, author: book.author)
+      }
+    }
+    .task(id: book.coverPath) {
+      guard let path = book.coverPath, CoverCache.cached(path) == nil else { return }
+      let image = await CoverCache.image(for: path)
+      loaded = (path, image)
+    }
+  }
+}
+
+/// A cover image with a book spine, or a cloth cover when the book has no image.
+struct CoverArt: View {
+  let image: NSImage?
+  let title: String
+  let author: String?
+  var width: CGFloat = ShelfMetrics.bookWidth
+  var height: CGFloat = ShelfMetrics.coverHeight
+  /// On the shelf, cloth covers stand at slightly different heights.
+  var varyClothHeight = true
+
+  var body: some View {
+    Group {
+      if let image {
+        Image(nsImage: image).resizable().aspectRatio(contentMode: .fit)
+          .frame(maxWidth: width, maxHeight: height)
+      } else {
+        ClothCover(title: title, author: author, scale: height / ShelfMetrics.coverHeight)
           .frame(
-            width: ShelfMetrics.bookWidth - 6,
-            height: ShelfMetrics.coverHeight - 4 - ClothCover.heightTrim(for: book.title))
+            width: width - 6,
+            height: height - 4 - (varyClothHeight ? ClothCover.heightTrim(for: title) : 0))
       }
     }
     .overlay(alignment: .leading) {
@@ -215,7 +254,7 @@ private struct BookCover: View {
         ],
         startPoint: .leading, endPoint: .trailing
       )
-      .frame(width: 12)
+      .frame(width: 12 * height / ShelfMetrics.coverHeight)
     }
     .overlay {
       LinearGradient(
@@ -231,6 +270,7 @@ private struct BookCover: View {
 private struct ClothCover: View {
   let title: String
   let author: String?
+  var scale: CGFloat = 1
 
   private static let palette: [(Color, Color)] = [
     (Color(red: 0.55, green: 0.16, blue: 0.16), Color(red: 0.93, green: 0.80, blue: 0.55)),
@@ -261,16 +301,16 @@ private struct ClothCover: View {
       cloth
       RoundedRectangle(cornerRadius: 1)
         .strokeBorder(ink.opacity(0.6), lineWidth: 1)
-        .padding(8)
-      VStack(spacing: 8) {
+        .padding(8 * scale)
+      VStack(spacing: 8 * scale) {
         Spacer(minLength: 0)
         Text(title)
-          .font(.system(size: 15, weight: .semibold, design: .serif))
+          .font(.system(size: 15 * scale, weight: .semibold, design: .serif))
           .lineLimit(4).minimumScaleFactor(0.7)
-        Rectangle().fill(ink.opacity(0.6)).frame(width: 28, height: 1)
+        Rectangle().fill(ink.opacity(0.6)).frame(width: 28 * scale, height: 1)
         if let author {
           Text(author)
-            .font(.system(size: 10, weight: .medium, design: .serif))
+            .font(.system(size: 10 * scale, weight: .medium, design: .serif))
             .textCase(.uppercase).tracking(0.8)
             .lineLimit(2).minimumScaleFactor(0.8)
         }
@@ -278,7 +318,7 @@ private struct ClothCover: View {
       }
       .foregroundStyle(ink)
       .multilineTextAlignment(.center)
-      .padding(.horizontal, 18).padding(.vertical, 20)
+      .padding(.horizontal, 18 * scale).padding(.vertical, 20 * scale)
     }
   }
 }

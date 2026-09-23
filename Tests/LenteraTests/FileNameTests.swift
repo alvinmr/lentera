@@ -9,6 +9,7 @@ import Testing
   #expect(service.safeBaseName("  ..Title..  ") == "Title")
   #expect(service.safeBaseName("...") == "Book")
   #expect(service.safeBaseName("") == "Book")
+  #expect(service.safeBaseName("ANOMALI \u{2029}Memoar\nSeorang  Bipolar") == "ANOMALI Memoar Seorang Bipolar")
 }
 
 @Test func safeBaseNameTruncatesLongTitles() {
