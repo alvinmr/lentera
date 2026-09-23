@@ -34,8 +34,11 @@ struct ContentView: View {
     .onDrop(of: [.fileURL], isTargeted: $model.isDropTargeted) { model.acceptDrop($0) }
     .sheet(item: $model.errorPresentation) { ErrorDetailView(error: $0) }
     .sheet(item: $editingBook) { book in
-      BookDetailsEditor(book: book) { title, author in
-        model.updateBook(book.id, title: title, author: author)
+      BookDetailsEditor(book: book, isMissing: model.missingBookIDs.contains(book.id)) {
+        title, author, cover in
+        withAnimation(Motion.easeOut(0.25)) {
+          model.updateBook(book.id, title: title, author: author, cover: cover)
+        }
       }
     }
   }
@@ -286,12 +289,25 @@ private struct QueueRow: View {
     HStack(spacing: 12) {
       icon.frame(width: 20)
       VStack(alignment: .leading, spacing: 3) {
-        Text(item.fileURL.lastPathComponent)
-          .lineLimit(1).truncationMode(.middle)
-          .help(item.fileURL.path)
+        HStack(spacing: 6) {
+          Text(item.displayName)
+            .lineLimit(1).truncationMode(.middle)
+          if let format = item.info?.format {
+            Tag(text: format.rawValue)
+          }
+          if item.info?.isLoan == true {
+            Tag(text: "Loan")
+          }
+        }
+        .help(item.fileURL.path)
+        if let author = item.info?.author {
+          Text(author)
+            .font(.caption).foregroundStyle(.secondary)
+            .lineLimit(1)
+        }
         Text(statusText)
           .font(.caption)
-          .foregroundStyle(item.isFailed ? Color.red : Color.secondary)
+          .foregroundStyle(statusColor)
           .lineLimit(2)
       }
       Spacer(minLength: 8)
@@ -359,10 +375,21 @@ private struct QueueRow: View {
     }
   }
 
+  private var isExpired: Bool { item.isWaiting && item.info?.isExpired() == true }
+
+  private var statusColor: Color {
+    if item.isFailed { return .red }
+    return isExpired ? .orange : .secondary
+  }
+
   private var statusText: String {
     switch item.state {
     case .waiting:
-      return "Waiting"
+      guard let expiration = item.info?.expiration else { return "Waiting" }
+      let date = expiration.formatted(date: .abbreviated, time: .omitted)
+      return isExpired
+        ? "License expired on \(date). Download a new ACSM if this fails."
+        : "Waiting · Download before \(date)"
     case .active(let progress, let message):
       return message.isEmpty ? "Processing…" : "\(message) · \(Int(progress * 100))%"
     case .done:
@@ -372,6 +399,17 @@ private struct QueueRow: View {
     case .cancelled:
       return "Canceled"
     }
+  }
+}
+
+private struct Tag: View {
+  let text: String
+
+  var body: some View {
+    Text(text)
+      .font(.caption2.weight(.semibold)).foregroundStyle(.secondary)
+      .padding(.horizontal, 6).padding(.vertical, 1)
+      .background(.quaternary, in: Capsule())
   }
 }
 
@@ -388,48 +426,6 @@ private struct SuccessLabel: View {
     }
     .font(.headline).foregroundStyle(.green)
     .onAppear { if !reduceMotion { bounce.toggle() } }
-  }
-}
-
-private struct BookDetailsEditor: View {
-  let book: BookRecord
-  let onSave: (String, String?) -> Void
-  @Environment(\.dismiss) private var dismiss
-  @State private var title: String
-  @State private var author: String
-
-  init(book: BookRecord, onSave: @escaping (String, String?) -> Void) {
-    self.book = book
-    self.onSave = onSave
-    _title = State(initialValue: book.title)
-    _author = State(initialValue: book.author ?? "")
-  }
-
-  var body: some View {
-    VStack(alignment: .leading, spacing: 18) {
-      Text("Edit Details").font(.title2.weight(.semibold))
-      VStack(alignment: .leading, spacing: 12) {
-        TextField("Title", text: $title)
-        TextField("Author", text: $author)
-      }
-      .textFieldStyle(.roundedBorder)
-      Text("Changes apply to your bookshelf only. The book file is not modified.")
-        .font(.caption).foregroundStyle(.secondary)
-      HStack {
-        Spacer()
-        Button("Cancel", role: .cancel) { dismiss() }
-          .lenteraButton()
-          .keyboardShortcut(.cancelAction)
-        Button("Save") {
-          onSave(title, author.isEmpty ? nil : author)
-          dismiss()
-        }
-        .lenteraProminentButton()
-        .keyboardShortcut(.defaultAction)
-        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-      }
-    }
-    .padding(24).frame(width: 420)
   }
 }
 

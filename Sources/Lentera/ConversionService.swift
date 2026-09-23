@@ -138,10 +138,7 @@ nonisolated struct ConversionService: Sendable {
   }
 
   private func persistentAdeptDirectory() throws -> URL {
-    let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-      .appendingPathComponent("Lentera", isDirectory: true)
-    try FileManager.default.createDirectory(at: support, withIntermediateDirectories: true)
-    let adept = support.appendingPathComponent("adept", isDirectory: true)
+    let adept = AdobeActivation.directory
     try FileManager.default.createDirectory(at: adept, withIntermediateDirectories: true)
     return adept
   }
@@ -287,23 +284,25 @@ nonisolated struct BookMetadata: Sendable {
   let author: String
   let coverData: Data?
 
+  static let unknownAuthor = "Author unavailable"
+
   @concurrent static func read(from file: URL, fallbackTitle: String) async -> BookMetadata {
     let fileExtension = file.pathExtension.lowercased()
     if fileExtension == "pdf" {
       return BookMetadata(
-        title: fallbackTitle, author: "Author unavailable", coverData: pdfCoverData(file))
+        title: fallbackTitle, author: unknownAuthor, coverData: pdfCoverData(file))
     }
     guard fileExtension == "epub" else {
-      return BookMetadata(title: fallbackTitle, author: "Author unavailable", coverData: nil)
+      return BookMetadata(title: fallbackTitle, author: unknownAuthor, coverData: nil)
     }
 
     guard let container = xml(unzipData(file, entry: "META-INF/container.xml")),
       let packagePath = value(container, "//*[local-name()='rootfile']/@full-path"),
       let package = xml(unzipData(file, entry: packagePath))
-    else { return BookMetadata(title: fallbackTitle, author: "Author unavailable", coverData: nil) }
+    else { return BookMetadata(title: fallbackTitle, author: unknownAuthor, coverData: nil) }
 
     let title = value(package, "//*[local-name()='metadata']/*[local-name()='title']") ?? fallbackTitle
-    let author = value(package, "//*[local-name()='metadata']/*[local-name()='creator']") ?? "Author unavailable"
+    let author = value(package, "//*[local-name()='metadata']/*[local-name()='creator']") ?? unknownAuthor
     let coverID = value(package, "//*[local-name()='meta'][@name='cover']/@content")
     let items = (try? package.nodes(forXPath: "//*[local-name()='manifest']/*[local-name()='item']")) ?? []
     let elements = items.compactMap { $0 as? XMLElement }

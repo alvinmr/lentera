@@ -67,3 +67,30 @@ private func makeBook(
   #expect(decoded.title == "Legacy")
   #expect(decoded.edited == nil)
 }
+
+@MainActor @Test func editingKeepsFingerprintAndReplacesCover() throws {
+  let book = BookRecord(
+    id: UUID(), title: "Book", author: nil, filePath: "/tmp/\(UUID().uuidString).epub",
+    format: .epub, coverPath: nil, completedAt: Date(), acsmFingerprint: "abc")
+  let model = ConversionModel(books: [book])
+  let png = try #require(Data(base64Encoded:
+    "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aE1sAAAAASUVORK5CYII="))
+
+  model.updateBook(book.id, title: "Book", author: nil, cover: .replace(png))
+  let first = try #require(model.books.first?.coverPath)
+  #expect(model.books.first?.acsmFingerprint == "abc")
+  #expect(try Data(contentsOf: URL(fileURLWithPath: first)) == png)
+
+  model.updateBook(book.id, title: "Book", author: nil, cover: .replace(png))
+  let second = try #require(model.books.first?.coverPath)
+  #expect(second != first)
+  #expect(!FileManager.default.fileExists(atPath: first))
+
+  model.updateBook(book.id, title: "Book", author: nil, cover: .remove)
+  #expect(model.books.first?.coverPath == nil)
+  #expect(!FileManager.default.fileExists(atPath: second))
+
+  model.updateBook(book.id, title: "Book", author: nil, cover: .replace(Data("nope".utf8)))
+  #expect(model.errorPresentation != nil)
+  #expect(model.books.first?.coverPath == nil)
+}

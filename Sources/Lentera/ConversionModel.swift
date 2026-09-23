@@ -58,6 +58,13 @@ nonisolated struct BookRecord: Codable, Identifiable, Sendable {
   var coverURL: URL? { coverPath.map(URL.init(fileURLWithPath:)) }
 }
 
+nonisolated enum CoverChange: Equatable, Sendable {
+  case keep
+  case replace(Data)
+  /// Falls back to the generated cloth cover.
+  case remove
+}
+
 nonisolated struct ConversionResult: Sendable {
   let fileURL: URL
   let title: String
@@ -109,13 +116,18 @@ nonisolated struct ConversionItem: Identifiable, Equatable, Sendable {
   let id: UUID
   let fileURL: URL
   let fingerprint: String?
+  let info: ACSMInfo?
   var state: QueueItemState = .waiting
 
-  init(id: UUID, fileURL: URL, fingerprint: String? = nil) {
+  init(id: UUID, fileURL: URL, fingerprint: String? = nil, info: ACSMInfo? = nil) {
     self.id = id
     self.fileURL = fileURL
     self.fingerprint = fingerprint
+    self.info = info
   }
+
+  /// The book title from the license, or the file name when the license has none.
+  var displayName: String { info?.title ?? fileURL.lastPathComponent }
 
   var isWaiting: Bool { state == .waiting }
   var isActive: Bool { if case .active = state { true } else { false } }
@@ -162,7 +174,7 @@ final class ConversionModel {
   var batchStatusText: String {
     guard isConverting else { return "" }
     let position = min(batchCompleted + 1, batchTotal)
-    let name = queue.first(where: \.isActive)?.fileURL.lastPathComponent ?? ""
+    let name = queue.first(where: \.isActive)?.displayName ?? ""
     return batchTotal > 1 ? "Converting \(position) of \(batchTotal) · \(name)" : name
   }
 
@@ -226,11 +238,15 @@ final class ConversionModel {
       guard book.author == nil || !hasCover else { continue }
       let metadata = await BookMetadata.read(from: book.fileURL, fallbackTitle: book.title)
       guard let index = self.books.firstIndex(where: { $0.id == book.id }) else { continue }
+      var coverPath = book.coverPath
+      if !hasCover, let saved = Self.saveCover(metadata.coverData, id: book.id) {
+        Self.deleteCover(book.coverPath)
+        coverPath = saved
+      }
       self.books[index] = BookRecord(
         id: book.id, title: metadata.title, author: book.author ?? metadata.author,
-        filePath: book.filePath, format: book.format,
-        coverPath: hasCover ? book.coverPath : Self.saveCover(metadata.coverData, id: book.id),
-        completedAt: book.completedAt)
+        filePath: book.filePath, format: book.format, coverPath: coverPath,
+        completedAt: book.completedAt, acsmFingerprint: book.acsmFingerprint)
     }
     refreshMissingFiles()
   }
@@ -283,16 +299,34 @@ final class ConversionModel {
     removeBook(id)
   }
 
-  func updateBook(_ id: UUID, title: String, author: String?) {
+  func updateBook(_ id: UUID, title: String, author: String?, cover: CoverChange = .keep) {
     let cleanTitle = title.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !cleanTitle.isEmpty, let index = books.firstIndex(where: { $0.id == id }) else { return }
     let cleanAuthor = author?.trimmingCharacters(in: .whitespacesAndNewlines)
     let book = books[index]
+    var coverPath = book.coverPath
+    switch cover {
+    case .keep:
+      break
+    case .replace(let data):
+      guard let saved = Self.saveCover(data, id: id) else {
+        errorPresentation = ErrorPresentation(
+          title: "Could not use this image",
+          summary: "Choose a JPEG, PNG, or HEIC image for the cover.",
+          detail: "The image data could not be decoded or saved.")
+        return
+      }
+      Self.deleteCover(book.coverPath)
+      coverPath = saved
+    case .remove:
+      Self.deleteCover(book.coverPath)
+      coverPath = nil
+    }
     books[index] = BookRecord(
       id: book.id, title: cleanTitle,
       author: cleanAuthor?.isEmpty == true ? nil : cleanAuthor,
-      filePath: book.filePath, format: book.format, coverPath: book.coverPath,
-      completedAt: book.completedAt, edited: true)
+      filePath: book.filePath, format: book.format, coverPath: coverPath,
+      completedAt: book.completedAt, edited: true, acsmFingerprint: book.acsmFingerprint)
     persistBooks()
   }
 
@@ -346,7 +380,8 @@ final class ConversionModel {
         continue
       }
       guard known.insert(Self.queueKey(url)).inserted else { continue }
-      let fingerprint = Self.fingerprint(of: url)
+      let data = try? Data(contentsOf: url)
+      let fingerprint = data.map(Self.fingerprint(of:))
       if let fingerprint {
         if let existing = books.first(where: { $0.acsmFingerprint == fingerprint }) {
           alreadyConverted.append(existing)
@@ -354,7 +389,9 @@ final class ConversionModel {
         }
         knownFingerprints.insert(fingerprint)
       }
-      queue.append(ConversionItem(id: UUID(), fileURL: url, fingerprint: fingerprint))
+      queue.append(
+        ConversionItem(
+          id: UUID(), fileURL: url, fingerprint: fingerprint, info: data.flatMap(ACSMInfo.read)))
       added += 1
     }
     if added > 0 { page = .convert }
@@ -499,6 +536,7 @@ final class ConversionModel {
 
   private static func deleteCover(_ path: String?) {
     guard let path else { return }
+    CoverCache.invalidate(path)
     try? FileManager.default.removeItem(atPath: path)
   }
 
@@ -506,9 +544,8 @@ final class ConversionModel {
     url.standardizedFileURL.path.lowercased()
   }
 
-  nonisolated static func fingerprint(of url: URL) -> String? {
-    guard let data = try? Data(contentsOf: url) else { return nil }
-    return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+  nonisolated static func fingerprint(of data: Data) -> String {
+    SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
   }
 
   private static func fileURL(from provider: NSItemProvider) async -> URL? {
@@ -529,7 +566,8 @@ final class ConversionModel {
       .appendingPathComponent("Lentera/covers", isDirectory: true)
     do {
       try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-      let url = directory.appendingPathComponent("\(id.uuidString).jpg")
+      // A fresh name per save, so views keyed on the path pick up a replaced cover.
+      let url = directory.appendingPathComponent("\(id.uuidString)-\(UUID().uuidString.prefix(8)).jpg")
       try data.write(to: url, options: .atomic)
       return url.path
     } catch {
