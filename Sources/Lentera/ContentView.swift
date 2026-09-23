@@ -226,22 +226,11 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        ScrollView {
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 28)], alignment: .leading, spacing: 28) {
-            ForEach(visibleBooks) { book in
-              BookCard(
-                book: book,
-                isMissing: model.missingBookIDs.contains(book.id),
-                model: model,
-                onEdit: { editingBook = book }
-              )
-            }
-          }
-          .padding(.horizontal, 24).padding(.bottom, 24)
-        }
+        BookshelfGrid(books: visibleBooks, model: model, onEdit: { editingBook = $0 })
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .background(Color.shelfWall)
     .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Search title or author")
     .task { model.refreshMissingFiles() }
   }
@@ -349,61 +338,6 @@ private struct QueueRow: View {
   }
 }
 
-private struct BookCard: View {
-  let book: BookRecord
-  let isMissing: Bool
-  let model: ConversionModel
-  let onEdit: () -> Void
-  @Environment(\.accessibilityReduceMotion) private var reduceMotion
-  @AppStorage("kindleEmail") private var kindleEmail = ""
-
-  var body: some View {
-    Button { model.openBook(book) } label: {
-      VStack(alignment: .leading, spacing: 8) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor))
-          if let url = book.coverURL, let image = NSImage(contentsOf: url) {
-            Image(nsImage: image).resizable().scaledToFit()
-          } else {
-            Image(systemName: "book.closed").font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
-          }
-        }
-        .frame(height: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .opacity(isMissing ? 0.55 : 1)
-        .overlay(alignment: .topTrailing) {
-          if isMissing {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .font(.system(size: 15))
-              .foregroundStyle(.orange)
-              .padding(6)
-              .background(.regularMaterial, in: Circle())
-              .padding(6)
-          }
-        }
-        Text(book.title).font(.headline).lineLimit(2).help(book.title)
-        Text(book.author ?? "Author unavailable").font(.callout).foregroundStyle(.secondary).lineLimit(1)
-        Text(book.format.rawValue).font(.caption).foregroundStyle(.secondary)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .multilineTextAlignment(.leading)
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(PressFeedbackButtonStyle(reduceMotion: reduceMotion))
-    .help(isMissing ? "\(book.title) — file not found" : "Open \(book.title)")
-    .accessibilityLabel(isMissing ? "\(book.title), file not found" : "Open \(book.title)")
-    .contextMenu {
-      Button("Open") { model.openBook(book) }.disabled(isMissing)
-      Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) }
-      Button("Send to Kindle…") { model.sendToKindle(book, address: kindleEmail) }.disabled(isMissing)
-      Button("Edit Details…", action: onEdit)
-      Divider()
-      Button("Remove from Shelf") { model.removeBook(book.id) }
-      Button("Move to Trash") { model.trashBook(book.id) }
-    }
-  }
-}
-
 private struct BookDetailsEditor: View {
   let book: BookRecord
   let onSave: (String, String?) -> Void
@@ -443,17 +377,6 @@ private struct BookDetailsEditor: View {
       }
     }
     .padding(24).frame(width: 420)
-  }
-}
-
-private struct PressFeedbackButtonStyle: ButtonStyle {
-  let reduceMotion: Bool
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
-      .opacity(configuration.isPressed ? 0.82 : 1)
-      .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
   }
 }
 
