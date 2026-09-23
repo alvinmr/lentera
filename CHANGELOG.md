@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.0](https://github.com/alvinmr/lentera/compare/v1.0.1...v1.1.0) (2026-09-23)
+
+
+### Features
+
+* add Send to Kindle, a wooden bookshelf, and motion ([2ab2202](https://github.com/alvinmr/lentera/commit/2ab2202e2ae8ea86e3d4a02fc9ba87764d2a5e25))
+* add shared motion tokens ([a2a2870](https://github.com/alvinmr/lentera/commit/a2a2870191e4bc6cb9ed94bb497aa267e3ab276a))
+* animate removing books from the shelf ([bd61615](https://github.com/alvinmr/lentera/commit/bd61615a13fcf2db6ca8d13ebc0629443300fba1))
+* animate the conversion queue and status ([dd60ceb](https://github.com/alvinmr/lentera/commit/dd60ceb8b69e108da41f9f01767658e8bd188275))
+* land new books on the shelf ([af3e185](https://github.com/alvinmr/lentera/commit/af3e18562f3e82e5fdaa90c70e3189b02fda664d))
+* send a book to Kindle from the bookshelf ([6fbda17](https://github.com/alvinmr/lentera/commit/6fbda178bb9216f79f2b7f6fea02acd1f2bb9fda))
+* show the bookshelf as wooden shelves ([e235b0d](https://github.com/alvinmr/lentera/commit/e235b0dcff0814465acd2923b6396e96af9ebc47))
+
+
+### Bug Fixes
+
+* make the book hover lift subtler ([bb0d46e](https://github.com/alvinmr/lentera/commit/bb0d46e493ae833fe30702bba63e704024ddd2cf))
+
 ## [1.0.1](https://github.com/alvinmr/lentera/compare/v1.0.0...v1.0.1) (2026-09-22)
 
 
