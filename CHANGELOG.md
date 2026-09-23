@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.2.0](https://github.com/alvinmr/lentera/compare/v1.1.0...v1.2.0) (2026-09-23)
+
+
+### Features
+
+* export, import, and reset the Adobe activation in Settings ([3c16114](https://github.com/alvinmr/lentera/commit/3c161147678d04c1a95d53734b4bdaf1ae238fcf))
+* redesign Edit Details, show ACSM details in the queue, back up the Adobe activation ([77747a9](https://github.com/alvinmr/lentera/commit/77747a9801ee9070d09676e9dac64f8f89bd9833))
+* redesign the Edit Details sheet ([3c16114](https://github.com/alvinmr/lentera/commit/3c161147678d04c1a95d53734b4bdaf1ae238fcf))
+* show the title, author, format, and expiration from the ACSM in the queue ([3c16114](https://github.com/alvinmr/lentera/commit/3c161147678d04c1a95d53734b4bdaf1ae238fcf))
+
+
+### Bug Fixes
+
+* address review findings on activation import, expiry, and covers ([66115a9](https://github.com/alvinmr/lentera/commit/66115a9fa43a216f2aea7ac44eaf79c91f7c9573))
+* keep line breaks from titles out of file names ([b51bf74](https://github.com/alvinmr/lentera/commit/b51bf747cec2c14c1fd0979b888cd34ba4a2ea5e))
+* keep the ACSM fingerprint when a book is edited ([3c16114](https://github.com/alvinmr/lentera/commit/3c161147678d04c1a95d53734b4bdaf1ae238fcf))
+
+
+### Performance Improvements
+
+* load shelf covers in the background and cache them in memory ([3c16114](https://github.com/alvinmr/lentera/commit/3c161147678d04c1a95d53734b4bdaf1ae238fcf))
+
 ## [1.1.0](https://github.com/alvinmr/lentera/compare/v1.0.1...v1.1.0) (2026-09-23)
 
 
