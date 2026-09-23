@@ -146,6 +146,8 @@ final class ConversionModel {
   var isConverting = false
   var books: [BookRecord] = []
   var missingBookIDs: Set<UUID> = []
+  /// Books converted in this session that have not been shown on the shelf yet.
+  var recentlyAddedBookIDs: Set<UUID> = []
   var errorPresentation: ErrorPresentation?
 
   var waitingCount: Int { queue.filter(\.isWaiting).count }
@@ -231,6 +233,10 @@ final class ConversionModel {
         completedAt: book.completedAt)
     }
     refreshMissingFiles()
+  }
+
+  func markBookLanded(_ id: UUID) {
+    recentlyAddedBookIDs.remove(id)
   }
 
   func refreshMissingFiles() {
@@ -481,6 +487,7 @@ final class ConversionModel {
     )
     books.removeAll { $0.filePath == record.filePath }
     books.insert(record, at: 0)
+    recentlyAddedBookIDs.insert(id)
     persistBooks()
   }
 

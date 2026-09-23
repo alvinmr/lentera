@@ -198,3 +198,21 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   let model = ConversionModel(books: [])
   #expect(model.destination?.path == "/tmp/lentera-destination")
 }
+
+@MainActor @Test func convertedBooksWaitToLandOnTheShelf() async throws {
+  let model = ConversionModel(
+    books: [],
+    convert: { file, destination, _ in
+      let title = file.deletingPathExtension().lastPathComponent
+      return ConversionResult(
+        fileURL: destination.appendingPathComponent("\(title).epub"),
+        title: title, author: "Author", format: .epub, coverData: nil)
+    })
+  model.addFiles([acsm("one.acsm"), acsm("two.acsm")])
+  model.convert()
+  try await waitForBatch(model)
+  #expect(model.recentlyAddedBookIDs == Set(model.books.map(\.id)))
+
+  model.markBookLanded(model.books[0].id)
+  #expect(model.recentlyAddedBookIDs == [model.books[1].id])
+}

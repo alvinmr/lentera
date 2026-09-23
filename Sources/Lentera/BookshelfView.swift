@@ -47,10 +47,12 @@ struct BookshelfGrid: View {
       let rows = stride(from: 0, to: books.count, by: columns).map {
         Array(books[$0..<min($0 + columns, books.count)])
       }
+      let landingOrder = books.filter { model.recentlyAddedBookIDs.contains($0.id) }.map(\.id)
       ScrollView {
         LazyVStack(spacing: 30) {
           ForEach(rows.indices, id: \.self) { index in
-            ShelfRow(books: rows[index], model: model, onEdit: onEdit)
+            ShelfRow(
+              books: rows[index], landingOrder: landingOrder, model: model, onEdit: onEdit)
           }
         }
         .padding(.horizontal, ShelfMetrics.pageInset)
@@ -62,6 +64,7 @@ struct BookshelfGrid: View {
 
 private struct ShelfRow: View {
   let books: [BookRecord]
+  let landingOrder: [UUID]
   let model: ConversionModel
   let onEdit: (BookRecord) -> Void
 
@@ -71,6 +74,8 @@ private struct ShelfRow: View {
         BookOnShelf(
           book: book,
           isMissing: model.missingBookIDs.contains(book.id),
+          // New books land one after another, 50 ms apart.
+          landingDelay: landingOrder.firstIndex(of: book.id).map { Double($0) * 0.05 },
           model: model,
           onEdit: { onEdit(book) }
         )
@@ -105,11 +110,15 @@ private struct ShelfPlank: View {
 private struct BookOnShelf: View {
   let book: BookRecord
   let isMissing: Bool
+  let landingDelay: Double?
   let model: ConversionModel
   let onEdit: () -> Void
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
   @AppStorage("kindleEmail") private var kindleEmail = ""
   @State private var isHovered = false
+
+  /// A new book stays above the shelf, hidden, until `land()` drops it into place.
+  private var isWaitingToLand: Bool { model.recentlyAddedBookIDs.contains(book.id) }
 
   private var isLifted: Bool { isHovered && !isMissing && !reduceMotion }
 
@@ -131,6 +140,7 @@ private struct BookOnShelf: View {
           }
           .shadow(color: .black.opacity(isLifted ? 0.32 : 0.22), radius: isLifted ? 10 : 4, x: 2, y: isLifted ? 8 : 3)
           .offset(y: isLifted ? -8 : 0)
+          .offset(y: isWaitingToLand && !reduceMotion ? -16 : 0)
           .frame(width: ShelfMetrics.bookWidth, height: ShelfMetrics.coverHeight, alignment: .bottom)
         VStack(alignment: .leading, spacing: 3) {
           Text(book.title).font(.callout.weight(.semibold)).lineLimit(2)
@@ -147,10 +157,12 @@ private struct BookOnShelf: View {
       .frame(width: ShelfMetrics.bookWidth, alignment: .leading)
       .multilineTextAlignment(.leading)
       .contentShape(Rectangle())
+      .opacity(isWaitingToLand ? 0 : 1)
     }
     .buttonStyle(PressFeedbackButtonStyle(reduceMotion: reduceMotion))
     .onHover { isHovered = $0 }
     .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.8), value: isLifted)
+    .onAppear(perform: land)
     .help(isMissing ? "\(book.title) — file not found" : "Open \(book.title)")
     .accessibilityLabel(isMissing ? "\(book.title), file not found" : "Open \(book.title)")
     .contextMenu {
@@ -161,6 +173,13 @@ private struct BookOnShelf: View {
       Divider()
       Button("Remove from Shelf") { model.removeBook(book.id) }
       Button("Move to Trash") { model.trashBook(book.id) }
+    }
+  }
+
+  private func land() {
+    guard isWaitingToLand else { return }
+    withAnimation((reduceMotion ? Motion.easeOut(0.2) : Motion.settle).delay(landingDelay ?? 0)) {
+      model.markBookLanded(book.id)
     }
   }
 }
