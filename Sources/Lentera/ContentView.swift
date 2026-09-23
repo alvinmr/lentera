@@ -78,9 +78,12 @@ struct ContentView: View {
           }
           .padding(14)
           .lenteraSurface()
-          if !model.queue.isEmpty { queueList }
+          if !model.queue.isEmpty {
+            queueList.transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
+          }
           status
         }
+        .animation(Motion.easeOut(0.25), value: model.queue.map(\.id))
         Text("The format follows the book from the provider. Files are saved on this Mac.")
           .font(.callout).foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
@@ -119,16 +122,39 @@ struct ContentView: View {
   private var queueList: some View {
     VStack(spacing: 0) {
       ForEach(model.queue) { item in
-        QueueRow(item: item, model: model)
-        if item.id != model.queue.last?.id {
-          Divider().padding(.leading, 44)
+        VStack(spacing: 0) {
+          QueueRow(item: item, model: model)
+          if item.id != model.queue.last?.id {
+            Divider().padding(.leading, 44)
+          }
         }
+        .transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
       }
     }
     .lenteraSurface()
   }
 
-  @ViewBuilder private var status: some View {
+  private enum StatusPhase {
+    case converting, ready, succeeded, nothingConverted, idle
+  }
+
+  private var statusPhase: StatusPhase {
+    if model.isConverting { return .converting }
+    if model.waitingCount > 0 { return .ready }
+    if model.succeededCount > 0 { return .succeeded }
+    return model.queue.isEmpty ? .idle : .nothingConverted
+  }
+
+  private var status: some View {
+    ZStack {
+      statusContent
+        .id(statusPhase)
+        .transition(Motion.appear(reduceMotion: reduceMotion))
+    }
+    .animation(Motion.easeOut(0.3), value: statusPhase)
+  }
+
+  @ViewBuilder private var statusContent: some View {
     if model.isConverting {
       VStack(spacing: 12) {
         ProgressView(value: model.overallProgress)
@@ -151,9 +177,7 @@ struct ContentView: View {
       }
     } else if model.succeededCount > 0 {
       VStack(spacing: 12) {
-        Label(model.succeededCount == 1 ? "1 book ready to read" : "\(model.succeededCount) books ready to read",
-              systemImage: "checkmark.circle.fill")
-          .font(.headline).foregroundStyle(.green)
+        SuccessLabel(count: model.succeededCount)
         HStack {
           Button("Reveal All in Finder", action: revealResults)
             .lenteraButton()
@@ -208,7 +232,10 @@ struct ContentView: View {
         .help("Sort: \(model.shelfSort.rawValue)")
       }
       .padding(24)
-      if !model.missingBookIDs.isEmpty { missingFilesNotice }
+      if !model.missingBookIDs.isEmpty {
+        missingFilesNotice.transition(
+          reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+      }
       if visibleBooks.isEmpty {
         ContentUnavailableView {
           Label(model.books.isEmpty ? "No Books Yet" : "No Matching Books", systemImage: "books.vertical")
@@ -226,22 +253,11 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
-        ScrollView {
-          LazyVGrid(columns: [GridItem(.adaptive(minimum: 150, maximum: 190), spacing: 28)], alignment: .leading, spacing: 28) {
-            ForEach(visibleBooks) { book in
-              BookCard(
-                book: book,
-                isMissing: model.missingBookIDs.contains(book.id),
-                model: model,
-                onEdit: { editingBook = book }
-              )
-            }
-          }
-          .padding(.horizontal, 24).padding(.bottom, 24)
-        }
+        BookshelfGrid(books: visibleBooks, model: model, onEdit: { editingBook = $0 })
       }
     }
     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    .background(Color.shelfWall)
     .searchable(text: $model.shelfSearch, placement: .toolbar, prompt: "Search title or author")
     .task { model.refreshMissingFiles() }
   }
@@ -251,7 +267,9 @@ struct ContentView: View {
       Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
       Text(model.missingBookIDs.count == 1 ? "1 book file is missing." : "\(model.missingBookIDs.count) book files are missing.")
       Spacer()
-      Button("Remove Missing", action: model.removeMissingBooks)
+      Button("Remove Missing") {
+        withAnimation(Motion.easeOut(0.2)) { model.removeMissingBooks() }
+      }
         .lenteraButton()
     }
     .padding(12)
@@ -318,18 +336,26 @@ private struct QueueRow: View {
     }
   }
 
-  @ViewBuilder private var icon: some View {
+  private var icon: some View {
+    ZStack {
+      if item.isActive {
+        ProgressView().controlSize(.small).transition(.opacity)
+      } else {
+        Image(systemName: symbol.name)
+          .foregroundStyle(symbol.color)
+          .contentTransition(.symbolEffect(.replace))
+          .transition(.opacity)
+      }
+    }
+    .animation(Motion.easeOut(0.15), value: item.isActive ? "spinner" : symbol.name)
+  }
+
+  private var symbol: (name: String, color: Color) {
     switch item.state {
-    case .waiting:
-      Image(systemName: "circle.dashed").foregroundStyle(.secondary)
-    case .active:
-      ProgressView().controlSize(.small)
-    case .done:
-      Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-    case .failed:
-      Image(systemName: "xmark.octagon.fill").foregroundStyle(.red)
-    case .cancelled:
-      Image(systemName: "minus.circle").foregroundStyle(.secondary)
+    case .waiting, .active: ("circle.dashed", .secondary)
+    case .done: ("checkmark.circle.fill", .green)
+    case .failed: ("xmark.octagon.fill", .red)
+    case .cancelled: ("minus.circle", .secondary)
     }
   }
 
@@ -349,56 +375,19 @@ private struct QueueRow: View {
   }
 }
 
-private struct BookCard: View {
-  let book: BookRecord
-  let isMissing: Bool
-  let model: ConversionModel
-  let onEdit: () -> Void
+private struct SuccessLabel: View {
+  let count: Int
   @Environment(\.accessibilityReduceMotion) private var reduceMotion
+  @State private var bounce = false
 
   var body: some View {
-    Button { model.openBook(book) } label: {
-      VStack(alignment: .leading, spacing: 8) {
-        ZStack {
-          RoundedRectangle(cornerRadius: 6).fill(Color(nsColor: .controlBackgroundColor))
-          if let url = book.coverURL, let image = NSImage(contentsOf: url) {
-            Image(nsImage: image).resizable().scaledToFit()
-          } else {
-            Image(systemName: "book.closed").font(.system(size: 40, weight: .light)).foregroundStyle(.secondary)
-          }
-        }
-        .frame(height: 220)
-        .clipShape(RoundedRectangle(cornerRadius: 6))
-        .opacity(isMissing ? 0.55 : 1)
-        .overlay(alignment: .topTrailing) {
-          if isMissing {
-            Image(systemName: "exclamationmark.triangle.fill")
-              .font(.system(size: 15))
-              .foregroundStyle(.orange)
-              .padding(6)
-              .background(.regularMaterial, in: Circle())
-              .padding(6)
-          }
-        }
-        Text(book.title).font(.headline).lineLimit(2).help(book.title)
-        Text(book.author ?? "Author unavailable").font(.callout).foregroundStyle(.secondary).lineLimit(1)
-        Text(book.format.rawValue).font(.caption).foregroundStyle(.secondary)
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .multilineTextAlignment(.leading)
-      .contentShape(Rectangle())
+    Label {
+      Text(count == 1 ? "1 book ready to read" : "\(count) books ready to read")
+    } icon: {
+      Image(systemName: "checkmark.circle.fill").symbolEffect(.bounce, value: bounce)
     }
-    .buttonStyle(PressFeedbackButtonStyle(reduceMotion: reduceMotion))
-    .help(isMissing ? "\(book.title) — file not found" : "Open \(book.title)")
-    .accessibilityLabel(isMissing ? "\(book.title), file not found" : "Open \(book.title)")
-    .contextMenu {
-      Button("Open") { model.openBook(book) }.disabled(isMissing)
-      Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([book.fileURL]) }
-      Button("Edit Details…", action: onEdit)
-      Divider()
-      Button("Remove from Shelf") { model.removeBook(book.id) }
-      Button("Move to Trash") { model.trashBook(book.id) }
-    }
+    .font(.headline).foregroundStyle(.green)
+    .onAppear { if !reduceMotion { bounce.toggle() } }
   }
 }
 
@@ -441,17 +430,6 @@ private struct BookDetailsEditor: View {
       }
     }
     .padding(24).frame(width: 420)
-  }
-}
-
-private struct PressFeedbackButtonStyle: ButtonStyle {
-  let reduceMotion: Bool
-
-  func makeBody(configuration: Configuration) -> some View {
-    configuration.label
-      .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
-      .opacity(configuration.isPressed ? 0.82 : 1)
-      .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
   }
 }
 
