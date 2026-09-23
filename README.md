@@ -13,9 +13,10 @@ Lentera is a native macOS app. It converts ACSM license files from Adobe into an
 - **Batch conversion**: Move one or many `.acsm` files into the drop area. Lentera converts the files in sequence. If the conversion of one file fails, Lentera continues with the other files.
 - **EPUB or PDF**: The provider selects the format. Lentera saves each file with the correct title and the author of the book.
 - **Local bookshelf**: The bookshelf shows the covers of the converted books. You can search, filter, and sort the books. You can open a book, show it in Finder, change its data, or move it to the Trash.
+- **Send to Kindle**: Right-click a book on the bookshelf and click **Send to Kindle…**. Lentera opens a Mail message to your Kindle email address with the book attached. Set the address in **Settings**. Files must be 50 MB or smaller.
 - **Missing file detection**: Lentera marks a book when its file moves or is absent. Then you can remove the book from the bookshelf.
 - **Automatic updates**: Lentera uses [Sparkle](https://sparkle-project.org) to install updates.
-- **Data privacy**: All conversions occur on your Mac. The libgourou tools in the app do the conversion. No book file goes to a third-party server.
+- **Data privacy**: All conversions occur on your Mac. The libgourou tools in the app do the conversion. Lentera does not send a book file to a third-party server. Only **Send to Kindle** sends a book, and only when you select it.
 
 ![Lentera bookshelf with covers](docs/screenshots/bookshelf.png)
 
