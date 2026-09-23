@@ -246,6 +246,58 @@ private func waitForBatch(_ model: ConversionModel) async throws {
   #expect(attempts.withLock { $0 } == 1)
   #expect(model.queue.map { label($0.state) } == ["failed", "waiting", "waiting"])
   #expect(model.queue[0].failure?.summary.contains("download a new ACSM") == true)
-  let until = try #require(model.rateLimitedUntil)
+  let until = try #require(model.rateLimit(for: model.queue[1]))
   #expect(until > Date().addingTimeInterval(14 * 60))
 }
+
+private func acsmFile(in directory: URL, _ name: String, provider: String) throws -> URL {
+  let url = directory.appendingPathComponent(name)
+  try Data(
+    """
+    <fulfillmentToken fulfillmentType="buy" xmlns="http://ns.adobe.com/adept">
+    <operatorURL>https://\(provider)/fulfillment</operatorURL></fulfillmentToken>
+    """.utf8
+  ).write(to: url)
+  return url
+}
+
+@MainActor @Test func rateLimitHoldsBackOnlyThatProvider() async throws {
+  let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+  try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+  defer { try? FileManager.default.removeItem(at: directory) }
+  let google = try acsmFile(in: directory, "google.acsm", provider: "play.google.com")
+  let googleToo = try acsmFile(in: directory, "google2.acsm", provider: "play.google.com")
+  let other = try acsmFile(in: directory, "other.acsm", provider: "acs.example.com")
+
+  let model = ConversionModel(
+    books: [],
+    convert: { file, destination, _ in
+      if file.lastPathComponent.hasPrefix("google") {
+        throw ConversionError.commandFailed("acsmdownloader", "HTTP Error code 429")
+      }
+      return ConversionResult(
+        fileURL: destination.appendingPathComponent("other.epub"),
+        title: "Other", author: "Author", format: .epub, coverData: nil)
+    })
+  model.addFiles([google, googleToo, other])
+  model.convert()
+  try await waitForBatch(model)
+
+  #expect(model.queue.map { label($0.state) } == ["failed", "waiting", "done"])
+  #expect(model.queue.first?.info?.provider == "play.google.com")
+  #expect(model.rateLimits.keys.sorted() == ["play.google.com"])
+  #expect(model.convertibleCount == 0)
+
+  // Neither Convert nor Retry sends a request during the cooldown.
+  model.convert()
+  #expect(!model.isConverting)
+  model.retryItem(model.queue[0].id)
+  #expect(label(model.queue[0].state) == "failed")
+
+  model.clearExpiredRateLimits(now: Date().addingTimeInterval(16 * 60))
+  #expect(model.rateLimits.isEmpty)
+  #expect(model.convertibleCount == 1)
+  model.retryItem(model.queue[0].id)
+  #expect(model.queue[0].isWaiting)
+}
+
