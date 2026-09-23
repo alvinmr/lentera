@@ -232,7 +232,10 @@ struct ContentView: View {
         .help("Sort: \(model.shelfSort.rawValue)")
       }
       .padding(24)
-      if !model.missingBookIDs.isEmpty { missingFilesNotice }
+      if !model.missingBookIDs.isEmpty {
+        missingFilesNotice.transition(
+          reduceMotion ? .opacity : .opacity.combined(with: .move(edge: .top)))
+      }
       if visibleBooks.isEmpty {
         ContentUnavailableView {
           Label(model.books.isEmpty ? "No Books Yet" : "No Matching Books", systemImage: "books.vertical")
@@ -264,7 +267,9 @@ struct ContentView: View {
       Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
       Text(model.missingBookIDs.count == 1 ? "1 book file is missing." : "\(model.missingBookIDs.count) book files are missing.")
       Spacer()
-      Button("Remove Missing", action: model.removeMissingBooks)
+      Button("Remove Missing") {
+        withAnimation(Motion.easeOut(0.2)) { model.removeMissingBooks() }
+      }
         .lenteraButton()
     }
     .padding(12)

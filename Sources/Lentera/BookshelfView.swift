@@ -67,6 +67,7 @@ private struct ShelfRow: View {
   let landingOrder: [UUID]
   let model: ConversionModel
   let onEdit: (BookRecord) -> Void
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   var body: some View {
     HStack(alignment: .top, spacing: ShelfMetrics.bookSpacing) {
@@ -79,6 +80,7 @@ private struct ShelfRow: View {
           model: model,
           onEdit: { onEdit(book) }
         )
+        .transition(Motion.appear(reduceMotion: reduceMotion, scale: 0.95))
       }
     }
     .padding(.horizontal, ShelfMetrics.shelfInset)
@@ -171,8 +173,12 @@ private struct BookOnShelf: View {
       Button("Send to Kindle…") { model.sendToKindle(book, address: kindleEmail) }.disabled(isMissing)
       Button("Edit Details…", action: onEdit)
       Divider()
-      Button("Remove from Shelf") { model.removeBook(book.id) }
-      Button("Move to Trash") { model.trashBook(book.id) }
+      Button("Remove from Shelf") {
+        withAnimation(Motion.easeOut(0.2)) { model.removeBook(book.id) }
+      }
+      Button("Move to Trash") {
+        withAnimation(Motion.easeOut(0.2)) { model.trashBook(book.id) }
+      }
     }
   }
 
