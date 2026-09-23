@@ -140,8 +140,8 @@ private struct BookOnShelf: View {
                 .padding(6)
             }
           }
-          .shadow(color: .black.opacity(isLifted ? 0.32 : 0.22), radius: isLifted ? 10 : 4, x: 2, y: isLifted ? 8 : 3)
-          .offset(y: isLifted ? -8 : 0)
+          .shadow(color: .black.opacity(isLifted ? 0.28 : 0.22), radius: isLifted ? 6 : 4, x: 2, y: isLifted ? 5 : 3)
+          .offset(y: isLifted ? -3 : 0)
           .offset(y: isWaitingToLand && !reduceMotion ? -16 : 0)
           .frame(width: ShelfMetrics.bookWidth, height: ShelfMetrics.coverHeight, alignment: .bottom)
         VStack(alignment: .leading, spacing: 3) {
@@ -163,7 +163,7 @@ private struct BookOnShelf: View {
     }
     .buttonStyle(PressFeedbackButtonStyle(reduceMotion: reduceMotion))
     .onHover { isHovered = $0 }
-    .animation(reduceMotion ? nil : .spring(response: 0.28, dampingFraction: 0.8), value: isLifted)
+    .animation(Motion.hover, value: isLifted)
     .onAppear(perform: land)
     .help(isMissing ? "\(book.title) — file not found" : "Open \(book.title)")
     .accessibilityLabel(isMissing ? "\(book.title), file not found" : "Open \(book.title)")
@@ -290,6 +290,6 @@ private struct PressFeedbackButtonStyle: ButtonStyle {
     configuration.label
       .scaleEffect(!reduceMotion && configuration.isPressed ? 0.97 : 1)
       .opacity(configuration.isPressed ? 0.82 : 1)
-      .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: configuration.isPressed)
+      .animation(Motion.press, value: configuration.isPressed)
   }
 }
