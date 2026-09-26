@@ -391,6 +391,27 @@ nonisolated struct BookMetadata: Sendable {
 }
 
 nonisolated enum FriendlyError {
+  /// How long Lentera asks you to wait after the provider rate limits requests.
+  static let rateLimitCooldown: TimeInterval = 15 * 60
+
+  static func isRateLimited(_ error: Error) -> Bool {
+    guard case .commandFailed(_, let output)? = error as? ConversionError else { return false }
+    return output.contains("HTTP Error code 429")
+  }
+
+  /// Every retry during the cooldown can extend the limit. When the ACSM expires first,
+  /// waiting cannot help, so the message asks for a new ACSM instead.
+  static func rateLimitMessage(retryAt: Date, acsmExpiration: Date?) -> String {
+    let time = retryAt.formatted(date: .omitted, time: .shortened)
+    if let acsmExpiration, acsmExpiration <= retryAt {
+      let expiry = acsmExpiration.formatted(date: .omitted, time: .shortened)
+      return "The book provider is rate limiting requests, and this ACSM expires at \(expiry). "
+        + "After \(time), download a new ACSM from the provider and convert it once."
+    }
+    return "The book provider is rate limiting requests. Wait until \(time), then try once. "
+      + "Each retry before then can extend the limit."
+  }
+
   static func message(command: String, output: String) -> String {
     let messages = [
       "E_LIC_ALREADY_FULFILLED_BY_ANOTHER_USER":

@@ -7,6 +7,8 @@ nonisolated struct ACSMInfo: Equatable, Sendable {
   let format: OutputFormat?
   let expiration: Date?
   let isLoan: Bool
+  /// The host of the provider's fulfillment server, such as play.google.com.
+  var provider: String? = nil
 
   func isExpired(at now: Date = Date()) -> Bool {
     expiration.map { $0 <= now } ?? false
@@ -25,7 +27,9 @@ nonisolated struct ACSMInfo: Equatable, Sendable {
       author: creators.isEmpty ? nil : creators.joined(separator: ", "),
       format: mimeType.flatMap(format(forMIMEType:)),
       expiration: strings(document, "/*/*[local-name()='expiration']").first.flatMap(date(from:)),
-      isLoan: fulfillmentType?.lowercased() == "loan"
+      isLoan: fulfillmentType?.lowercased() == "loan",
+      provider: strings(document, "/*/*[local-name()='operatorURL']").first
+        .flatMap { URL(string: $0)?.host()?.lowercased() }
     )
   }
 

@@ -141,6 +141,9 @@ nonisolated struct ConversionItem: Identifiable, Equatable, Sendable {
   /// The book title from the license, or the file name when the license has none.
   var displayName: String { info?.title ?? fileURL.lastPathComponent }
 
+  /// Rate limits apply per provider. Files whose license cannot be read share one key.
+  var provider: String { info?.provider ?? "" }
+
   var isWaiting: Bool { state == .waiting }
   var isActive: Bool { if case .active = state { true } else { false } }
   var isDone: Bool { if case .done = state { true } else { false } }
@@ -177,6 +180,16 @@ final class ConversionModel {
   var errorPresentation: ErrorPresentation?
   /// Loans that are being returned to the provider now.
   var returningBookIDs: Set<UUID> = []
+  /// Providers that rate limited a conversion, and when to try them again. Requests before
+  /// then can extend the limit, so their files are not converted or retried until it ends.
+  private(set) var rateLimits: [String: Date] = [:]
+
+  func rateLimit(for item: ConversionItem) -> Date? { rateLimits[item.provider] }
+
+  /// Waiting files that are not held back by a rate limit.
+  var convertibleCount: Int {
+    queue.filter { $0.isWaiting && rateLimit(for: $0) == nil }.count
+  }
 
   var waitingCount: Int { queue.filter(\.isWaiting).count }
   var succeededCount: Int { queue.filter(\.isDone).count }
@@ -478,7 +491,7 @@ final class ConversionModel {
   }
 
   func convert() {
-    guard !isConverting, waitingCount > 0 else { return }
+    guard !isConverting, convertibleCount > 0 else { return }
     let outputDirectory =
       destination ?? FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
     isConverting = true
@@ -497,6 +510,11 @@ final class ConversionModel {
       }
       for index in queue.indices where queue[index].isWaiting {
         if Task.isCancelled { break }
+        // Includes providers that rate limited an earlier file of this batch.
+        if rateLimit(for: queue[index]) != nil {
+          batchTotal -= 1
+          continue
+        }
         let id = queue[index].id
         let acsm = queue[index].fileURL
         queue[index].state = .active(progress: 0, message: "Preparing…")
@@ -527,8 +545,19 @@ final class ConversionModel {
           batchCompleted += 1
           batchFailed += 1
           Log.conversion.error("Conversion failed: \(String(describing: error), privacy: .private)")
+          var failure = ErrorPresentation.from(error)
+          let rateLimited = FriendlyError.isRateLimited(error)
+          if rateLimited {
+            let retryAt = Date().addingTimeInterval(FriendlyError.rateLimitCooldown)
+            limit(queue[index].provider, until: retryAt)
+            failure = ErrorPresentation(
+              title: failure.title,
+              summary: FriendlyError.rateLimitMessage(
+                retryAt: retryAt, acsmExpiration: queue[index].info?.expiration),
+              detail: failure.detail)
+          }
           if let current = queue.firstIndex(where: { $0.id == id }) {
-            queue[current].state = .failed(ErrorPresentation.from(error))
+            queue[current].state = .failed(failure)
           }
         }
       }
@@ -536,11 +565,25 @@ final class ConversionModel {
   }
 
   func retryItem(_ id: UUID) {
-    guard !isConverting, let index = queue.firstIndex(where: { $0.id == id }) else { return }
+    guard !isConverting, let index = queue.firstIndex(where: { $0.id == id }),
+      rateLimit(for: queue[index]) == nil
+    else { return }
     switch queue[index].state {
     case .failed, .cancelled: queue[index].state = .waiting
     case .waiting, .active, .done: return
     }
+  }
+
+  private func limit(_ provider: String, until date: Date) {
+    rateLimits[provider] = date
+    Task { [weak self] in
+      try? await Task.sleep(for: .seconds(max(0, date.timeIntervalSinceNow)))
+      self?.clearExpiredRateLimits()
+    }
+  }
+
+  func clearExpiredRateLimits(now: Date = Date()) {
+    rateLimits = rateLimits.filter { $0.value > now }
   }
 
   func cancel() {

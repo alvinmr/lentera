@@ -116,6 +116,8 @@ struct ContentView: View {
           if !model.queue.isEmpty {
             queueList.transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
           }
+          rateLimitNotice
+            .animation(Motion.easeOut(0.25), value: model.rateLimits)
           status
         }
         .animation(Motion.easeOut(0.25), value: model.queue.map(\.id))
@@ -196,6 +198,31 @@ struct ContentView: View {
     .lenteraSurface()
   }
 
+  /// Shown until each provider's rate limit ends, so a quick retry does not extend the limit.
+  @ViewBuilder private var rateLimitNotice: some View {
+    let limits = model.rateLimits.sorted { $0.value < $1.value }
+    if !limits.isEmpty {
+      VStack(alignment: .leading, spacing: 6) {
+        ForEach(limits, id: \.key) { provider, until in
+          HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: "clock.badge.exclamationmark")
+              .foregroundStyle(.orange)
+              .accessibilityHidden(true)
+            Text(
+              "\(provider.isEmpty ? "The book provider" : provider) is limiting requests. Its files can be converted or retried after \(until.formatted(date: .omitted, time: .shortened))."
+            )
+            .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+          }
+        }
+      }
+      .font(.callout)
+      .padding(12)
+      .background(Color.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+      .transition(Motion.appear(reduceMotion: reduceMotion, anchor: .top))
+    }
+  }
+
   private enum StatusPhase {
     case converting, ready, succeeded, nothingConverted, idle
   }
@@ -230,12 +257,13 @@ struct ContentView: View {
       }
     } else if model.waitingCount > 0 {
       HStack {
-        Text(model.waitingCount == 1 ? "1 file ready to convert." : "\(model.waitingCount) files ready to convert.")
+        Text(readyText)
           .foregroundStyle(.secondary)
         Spacer()
         Button("Convert", action: model.convert)
           .lenteraProminentButton().controlSize(.large)
           .keyboardShortcut(.defaultAction)
+          .disabled(model.convertibleCount == 0)
       }
     } else if model.succeededCount > 0 {
       VStack(spacing: 12) {
@@ -259,6 +287,15 @@ struct ContentView: View {
       Text("Choose one or more ACSM files to get started.")
         .foregroundStyle(.secondary)
     }
+  }
+
+  private var readyText: String {
+    let ready = model.convertibleCount
+    let held = model.waitingCount - ready
+    let readyPart = ready == 1 ? "1 file ready to convert." : "\(ready) files ready to convert."
+    guard held > 0 else { return readyPart }
+    let heldPart = held == 1 ? "1 file waits for the provider." : "\(held) files wait for the provider."
+    return ready == 0 ? heldPart : "\(readyPart) \(heldPart)"
   }
 
   private func revealResults() {
@@ -421,9 +458,9 @@ private struct QueueRow: View {
           Image(systemName: "arrow.clockwise")
         }
         .buttonStyle(.borderless)
-        .help("Retry")
+        .help(retryHelp)
         .accessibilityLabel("Retry")
-        .disabled(model.isConverting)
+        .disabled(model.isConverting || model.rateLimit(for: item) != nil)
       }
       if let url = item.resultURL {
         Button {
@@ -444,7 +481,7 @@ private struct QueueRow: View {
       }
       if item.canRetry {
         Button("Retry") { model.retryItem(item.id) }
-          .disabled(model.isConverting)
+          .disabled(model.isConverting || model.rateLimit(for: item) != nil)
       }
       Button("Remove from Queue") { model.removeItem(item.id) }
         .disabled(model.isConverting || item.isActive)
@@ -472,6 +509,11 @@ private struct QueueRow: View {
     case .failed: ("xmark.octagon.fill", .red)
     case .cancelled: ("minus.circle", .secondary)
     }
+  }
+
+  private var retryHelp: String {
+    guard let until = model.rateLimit(for: item) else { return "Retry" }
+    return "Retry after \(until.formatted(date: .omitted, time: .shortened)), when the provider limit ends"
   }
 
   private func isExpired(at now: Date) -> Bool {
