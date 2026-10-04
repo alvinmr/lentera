@@ -36,9 +36,10 @@ The app has an ad-hoc signature. Apple did not notarize the app. If macOS blocks
 You can also install the app with [Homebrew](https://brew.sh). Homebrew installs the app without the Gatekeeper prompt. Homebrew downloads do not have a quarantine attribute.
 
 ```sh
-brew tap alvinmr/tap
-brew install --cask lentera
+brew install --cask alvinmr/tap/lentera
 ```
+
+Use the full name of the cask. Homebrew 7 and later do not load a cask from a tap that you did not trust. When you type the full name, Homebrew trusts the cask.
 
 ## Use
 
