@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.3.1](https://github.com/alvinmr/lentera/compare/v1.3.0...v1.3.1) (2026-09-26)
+
+
+### Bug Fixes
+
+* hold back Convert and Retry for a rate-limited provider ([3f3f03c](https://github.com/alvinmr/lentera/commit/3f3f03cc0ca49e6b78f62768cb3e6dbe99a15efe))
+* stop the batch and suggest a new ACSM when the provider rate limits ([a5183b5](https://github.com/alvinmr/lentera/commit/a5183b577a4a841d69ae2669283f6bf516f7eec0))
+* stop warning that an unexpired ACSM is expired ([c21696e](https://github.com/alvinmr/lentera/commit/c21696e90927bf01d9a5324c48fd95615c4796e3))
+
 ## [1.3.0](https://github.com/alvinmr/lentera/compare/v1.2.0...v1.3.0) (2026-09-23)
 
 
